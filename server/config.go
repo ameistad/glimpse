@@ -1,0 +1,144 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"time"
+)
+
+type Config struct {
+	// Path to the directory containing original RAW photos
+	OriginalsPath string `json:"originals_path"`
+
+	// Path to the directory where thumbnails will be stored
+	ThumbnailsPath string `json:"thumbnails_path"`
+
+	// Path to the SQLite database file
+	DatabasePath string `json:"database_path"`
+
+	// Address to listen on (e.g., ":8080" or "0.0.0.0:8080")
+	ListenAddr string `json:"listen_addr"`
+
+	// Interval between directory scans
+	ScanInterval time.Duration `json:"scan_interval"`
+
+	// Thumbnail size (max dimension)
+	ThumbnailSize int `json:"thumbnail_size"`
+
+	// Supported RAW file extensions (lowercase, with dot)
+	RawExtensions []string `json:"raw_extensions"`
+}
+
+type configJSON struct {
+	OriginalsPath   string   `json:"originals_path"`
+	ThumbnailsPath  string   `json:"thumbnails_path"`
+	DatabasePath    string   `json:"database_path"`
+	ListenAddr      string   `json:"listen_addr"`
+	ScanIntervalSec int      `json:"scan_interval_seconds"`
+	ThumbnailSize   int      `json:"thumbnail_size"`
+	RawExtensions   []string `json:"raw_extensions"`
+}
+
+func LoadConfig(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return default config if file doesn't exist
+			return DefaultConfig(), nil
+		}
+		return nil, err
+	}
+
+	var cj configJSON
+	if err := json.Unmarshal(data, &cj); err != nil {
+		return nil, err
+	}
+
+	cfg := &Config{
+		OriginalsPath:  cj.OriginalsPath,
+		ThumbnailsPath: cj.ThumbnailsPath,
+		DatabasePath:   cj.DatabasePath,
+		ListenAddr:     cj.ListenAddr,
+		ScanInterval:   time.Duration(cj.ScanIntervalSec) * time.Second,
+		ThumbnailSize:  cj.ThumbnailSize,
+		RawExtensions:  cj.RawExtensions,
+	}
+
+	// Apply defaults for empty values
+	if cfg.OriginalsPath == "" {
+		cfg.OriginalsPath = "/pool/photos/originals"
+	}
+	if cfg.ThumbnailsPath == "" {
+		cfg.ThumbnailsPath = "/pool/thumbnails"
+	}
+	if cfg.DatabasePath == "" {
+		cfg.DatabasePath = "/pool/thumbnails/glimpse.db"
+	}
+	if cfg.ListenAddr == "" {
+		cfg.ListenAddr = ":8080"
+	}
+	if cfg.ScanInterval == 0 {
+		cfg.ScanInterval = 1 * time.Hour
+	}
+	if cfg.ThumbnailSize == 0 {
+		cfg.ThumbnailSize = 800
+	}
+	if len(cfg.RawExtensions) == 0 {
+		cfg.RawExtensions = DefaultRawExtensions()
+	}
+
+	return cfg, nil
+}
+
+func DefaultConfig() *Config {
+	return &Config{
+		OriginalsPath:  "/pool/photos/originals",
+		ThumbnailsPath: "/pool/thumbnails",
+		DatabasePath:   "/pool/thumbnails/glimpse.db",
+		ListenAddr:     ":8080",
+		ScanInterval:   1 * time.Hour,
+		ThumbnailSize:  800,
+		RawExtensions:  DefaultRawExtensions(),
+	}
+}
+
+func DefaultRawExtensions() []string {
+	return []string{
+		".cr2",  // Canon
+		".cr3",  // Canon (newer)
+		".nef",  // Nikon
+		".nrw",  // Nikon
+		".arw",  // Sony
+		".srf",  // Sony
+		".sr2",  // Sony
+		".orf",  // Olympus
+		".pef",  // Pentax
+		".raf",  // Fuji
+		".rw2",  // Panasonic
+		".dng",  // Adobe DNG
+		".raw",  // Generic
+		".rwl",  // Leica
+		".3fr",  // Hasselblad
+		".fff",  // Hasselblad
+		".iiq",  // Phase One
+	}
+}
+
+func (c *Config) SaveExample(path string) error {
+	cj := configJSON{
+		OriginalsPath:   c.OriginalsPath,
+		ThumbnailsPath:  c.ThumbnailsPath,
+		DatabasePath:    c.DatabasePath,
+		ListenAddr:      c.ListenAddr,
+		ScanIntervalSec: int(c.ScanInterval.Seconds()),
+		ThumbnailSize:   c.ThumbnailSize,
+		RawExtensions:   c.RawExtensions,
+	}
+
+	data, err := json.MarshalIndent(cj, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
+}

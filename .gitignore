@@ -1,0 +1,32 @@
+# Go
+server/glimpse-server
+*.exe
+*.test
+*.out
+
+# Swift
+app/Glimpse/.build/
+app/Glimpse/.swiftpm/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+*.app
+
+# Config (may contain sensitive paths)
+server/config.json
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

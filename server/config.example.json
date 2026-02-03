@@ -1,0 +1,27 @@
+{
+  "originals_path": "/pool/photos/originals",
+  "thumbnails_path": "/pool/thumbnails",
+  "database_path": "/pool/thumbnails/glimpse.db",
+  "listen_addr": ":8080",
+  "scan_interval_seconds": 3600,
+  "thumbnail_size": 800,
+  "raw_extensions": [
+    ".cr2",
+    ".cr3",
+    ".nef",
+    ".nrw",
+    ".arw",
+    ".srf",
+    ".sr2",
+    ".orf",
+    ".pef",
+    ".raf",
+    ".rw2",
+    ".dng",
+    ".raw",
+    ".rwl",
+    ".3fr",
+    ".fff",
+    ".iiq"
+  ]
+}
