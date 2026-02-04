@@ -10,12 +10,13 @@ import (
 )
 
 type Handler struct {
-	cfg *Config
-	db  *Database
+	cfg     *Config
+	db      *Database
+	scanner *Scanner
 }
 
-func NewHandler(cfg *Config, db *Database) *Handler {
-	return &Handler{cfg: cfg, db: db}
+func NewHandler(cfg *Config, db *Database, scanner *Scanner) *Handler {
+	return &Handler{cfg: cfg, db: db, scanner: scanner}
 }
 
 func (h *Handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +123,16 @@ func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		log.Printf("Error encoding JSON: %v", err)
 	}
+}
+
+func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
+	if !h.scanner.TryScan() {
+		w.WriteHeader(http.StatusConflict)
+		h.jsonResponse(w, map[string]string{"status": "already_running"})
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+	h.jsonResponse(w, map[string]string{"status": "started"})
 }
 
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path, contentType string) {

@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var isScanning = false
 
     var body: some View {
         NavigationSplitView {
@@ -47,6 +48,18 @@ struct ContentView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .help("Refresh")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: triggerRescan) {
+                    if isScanning {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(isScanning)
+                .help("Rescan library for new photos")
             }
         }
         .onAppear {
@@ -92,6 +105,26 @@ struct ContentView: View {
                 errorMessage = error.localizedDescription
                 showingError = true
             }
+        }
+    }
+
+    private func triggerRescan() {
+        guard let apiClient = viewModel.apiClient else { return }
+        isScanning = true
+        Task {
+            do {
+                let status = try await apiClient.triggerScan()
+                if status == "already_running" {
+                    errorMessage = "A scan is already in progress."
+                    showingError = true
+                }
+            } catch {
+                errorMessage = "Failed to trigger scan: \(error.localizedDescription)"
+                showingError = true
+            }
+            try? await Task.sleep(for: .seconds(3))
+            refresh()
+            isScanning = false
         }
     }
 

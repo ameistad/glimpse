@@ -51,7 +51,7 @@ func main() {
 	}()
 
 	// Setup HTTP server
-	handler := NewHandler(cfg, db)
+	handler := NewHandler(cfg, db, scanner)
 	mux := http.NewServeMux()
 
 	// API routes
@@ -61,6 +61,7 @@ func main() {
 	mux.HandleFunc("GET /api/photos/{id}/original", handler.GetOriginal)
 	mux.HandleFunc("GET /api/folders", handler.ListFolders)
 	mux.HandleFunc("GET /api/stats", handler.GetStats)
+	mux.HandleFunc("POST /api/scan", handler.TriggerScan)
 
 	// CORS middleware for development
 	corsHandler := corsMiddleware(mux)
@@ -95,7 +96,7 @@ func main() {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == "OPTIONS" {

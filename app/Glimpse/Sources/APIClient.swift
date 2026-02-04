@@ -85,6 +85,15 @@ class APIClient: ObservableObject {
         URL(string: "\(baseURL)/api/photos/\(photo.id)/original")!
     }
 
+    func triggerScan() async throws -> String {
+        let url = URL(string: "\(baseURL)/api/scan")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let (data, _) = try await session.data(for: request)
+        let response = try JSONDecoder().decode([String: String].self, from: data)
+        return response["status"] ?? "unknown"
+    }
+
     func downloadOriginal(_ photo: Photo, to directory: URL) async throws -> URL {
         let url = originalURL(for: photo)
         let (tempURL, _) = try await session.download(from: url)

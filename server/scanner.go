@@ -8,15 +8,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 type Scanner struct {
-	cfg *Config
-	db  *Database
+	cfg      *Config
+	db       *Database
+	scanning atomic.Bool
 }
 
 func NewScanner(cfg *Config, db *Database) *Scanner {
 	return &Scanner{cfg: cfg, db: db}
+}
+
+func (s *Scanner) IsScanning() bool {
+	return s.scanning.Load()
+}
+
+func (s *Scanner) TryScan() bool {
+	if !s.scanning.CompareAndSwap(false, true) {
+		return false
+	}
+	go func() {
+		defer s.scanning.Store(false)
+		log.Println("Starting on-demand scan...")
+		if err := s.Scan(); err != nil {
+			log.Printf("On-demand scan error: %v", err)
+		}
+		log.Println("On-demand scan complete")
+	}()
+	return true
 }
 
 func (s *Scanner) Scan() error {

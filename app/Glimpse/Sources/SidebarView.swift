@@ -10,6 +10,8 @@ struct SidebarView: View {
             Section("Library") {
                 Button(action: { selectedFolder = nil }) {
                     Label("All Photos", systemImage: "photo.on.rectangle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .padding(.vertical, 2)
@@ -22,6 +24,7 @@ struct SidebarView: View {
                     ForEach(organizedFolders, id: \.path) { folder in
                         Button(action: { selectedFolder = folder }) {
                             FolderRow(folder: folder)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .padding(.vertical, 2)
