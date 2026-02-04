@@ -38,9 +38,17 @@ func (s *Scanner) Scan() error {
 			return nil
 		}
 
-		// Check if it's a RAW file
+		name := d.Name()
+		if strings.HasPrefix(name, "._") || strings.HasPrefix(name, ".") {
+			return nil
+		}
+
 		ext := strings.ToLower(filepath.Ext(path))
-		if !s.isRawExtension(ext) {
+		if !s.isSupportedExtension(ext) {
+			return nil
+		}
+
+		if isStandardImage(ext) && s.hasRawCompanion(path) {
 			return nil
 		}
 
@@ -96,11 +104,38 @@ func (s *Scanner) cleanup() {
 	}
 }
 
-func (s *Scanner) isRawExtension(ext string) bool {
-	for _, rawExt := range s.cfg.RawExtensions {
-		if ext == rawExt {
+func (s *Scanner) isSupportedExtension(ext string) bool {
+	if isStandardImage(ext) {
+		return true
+	}
+	for _, supported := range s.cfg.RawExtensions {
+		if ext == supported {
 			return true
 		}
+	}
+	return false
+}
+
+func (s *Scanner) hasRawCompanion(imgPath string) bool {
+	base := strings.TrimSuffix(imgPath, filepath.Ext(imgPath))
+	for _, rawExt := range s.cfg.RawExtensions {
+		if isStandardImage(rawExt) {
+			continue
+		}
+		candidates := []string{base + rawExt, base + strings.ToUpper(rawExt)}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isStandardImage(ext string) bool {
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".tif", ".tiff":
+		return true
 	}
 	return false
 }
@@ -155,32 +190,57 @@ func (s *Scanner) processPhoto(path string, info fs.FileInfo) error {
 }
 
 func (s *Scanner) generateThumbnail(rawPath, thumbPath string) (width, height int, err error) {
-	// First, try to extract embedded JPEG preview using dcraw -e
-	// This is much faster than full RAW conversion
+	ext := strings.ToLower(filepath.Ext(rawPath))
+
+	if isStandardImage(ext) {
+		return s.generateStandardThumbnail(rawPath, thumbPath)
+	}
+	return s.generateRawThumbnail(rawPath, thumbPath)
+}
+
+func (s *Scanner) generateStandardThumbnail(imgPath, thumbPath string) (width, height int, err error) {
+	size := fmt.Sprintf("%dx%d>", s.cfg.ThumbnailSize, s.cfg.ThumbnailSize)
+	cmd := exec.Command("convert", imgPath+"[0]",
+		"-resize", size,
+		"-quality", "85",
+		"-auto-orient",
+		thumbPath,
+	)
+	if err := cmd.Run(); err != nil {
+		return 0, 0, fmt.Errorf("convert failed: %w", err)
+	}
+
+	cmd = exec.Command("identify", "-format", "%w %h", imgPath+"[0]")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, 0, nil
+	}
+	fmt.Sscanf(string(output), "%d %d", &width, &height)
+	return width, height, nil
+}
+
+func (s *Scanner) generateRawThumbnail(rawPath, thumbPath string) (width, height int, err error) {
 	previewPath := rawPath + ".thumb.jpg"
 
-	// Try dcraw -e (extract embedded thumbnail/preview)
 	cmd := exec.Command("dcraw", "-e", "-c", rawPath)
 	previewData, err := cmd.Output()
 
 	if err != nil || len(previewData) == 0 {
-		// Fall back to full RAW conversion with dcraw
 		log.Printf("No embedded preview, converting RAW for %s", rawPath)
-		cmd = exec.Command("dcraw", "-c", "-w", "-h", rawPath) // -h for half-size (faster)
+		cmd = exec.Command("dcraw", "-c", "-w", "-h", rawPath)
 		previewData, err = cmd.Output()
 		if err != nil {
 			return 0, 0, fmt.Errorf("dcraw failed: %w", err)
 		}
 	}
 
-	// Write preview to temp file
 	tempFile, err := os.CreateTemp("", "glimpse-*.ppm")
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
 	defer os.Remove(tempPath)
-	defer os.Remove(previewPath) // Clean up dcraw preview if it exists
+	defer os.Remove(previewPath)
 
 	if _, err := tempFile.Write(previewData); err != nil {
 		tempFile.Close()
@@ -188,7 +248,6 @@ func (s *Scanner) generateThumbnail(rawPath, thumbPath string) (width, height in
 	}
 	tempFile.Close()
 
-	// Use ImageMagick to resize and convert to JPEG
 	size := fmt.Sprintf("%dx%d>", s.cfg.ThumbnailSize, s.cfg.ThumbnailSize)
 	cmd = exec.Command("convert", tempPath,
 		"-resize", size,
@@ -200,7 +259,6 @@ func (s *Scanner) generateThumbnail(rawPath, thumbPath string) (width, height in
 		return 0, 0, fmt.Errorf("convert failed: %w", err)
 	}
 
-	// Get dimensions of original RAW file
 	cmd = exec.Command("dcraw", "-i", "-v", rawPath)
 	output, err := cmd.Output()
 	if err != nil {

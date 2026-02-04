@@ -104,23 +104,26 @@ func DefaultConfig() *Config {
 
 func DefaultRawExtensions() []string {
 	return []string{
-		".cr2",  // Canon
-		".cr3",  // Canon (newer)
-		".nef",  // Nikon
-		".nrw",  // Nikon
-		".arw",  // Sony
-		".srf",  // Sony
-		".sr2",  // Sony
-		".orf",  // Olympus
-		".pef",  // Pentax
-		".raf",  // Fuji
-		".rw2",  // Panasonic
-		".dng",  // Adobe DNG
-		".raw",  // Generic
-		".rwl",  // Leica
-		".3fr",  // Hasselblad
-		".fff",  // Hasselblad
-		".iiq",  // Phase One
+		".cr2",
+		".cr3",
+		".nef",
+		".nrw",
+		".arw",
+		".srf",
+		".sr2",
+		".orf",
+		".pef",
+		".raf",
+		".rw2",
+		".dng",
+		".raw",
+		".rwl",
+		".3fr",
+		".fff",
+		".iiq",
+		".jpg",
+		".jpeg",
+		".png",
 	}
 }
 
