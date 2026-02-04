@@ -3,6 +3,7 @@
   "thumbnails_path": "/pool/thumbnails",
   "database_path": "/pool/thumbnails/glimpse.db",
   "listen_addr": ":8080",
+  "api_key": "",
   "scan_interval_seconds": 3600,
   "thumbnail_size": 800,
   "raw_extensions": [

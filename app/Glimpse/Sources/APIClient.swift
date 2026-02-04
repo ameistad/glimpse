@@ -1,12 +1,15 @@
 import Foundation
+import AppKit
 
 class APIClient: ObservableObject {
     private let baseURL: String
-    private let session: URLSession
+    private let apiKey: String
+    let session: URLSession
     private let decoder: JSONDecoder
 
-    init(baseURL: String) {
+    init(baseURL: String, apiKey: String) {
         self.baseURL = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        self.apiKey = apiKey
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -18,7 +21,6 @@ class APIClient: ObservableObject {
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
 
-            // Try multiple date formats
             let formatters = [
                 "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSZ",
                 "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ",
@@ -38,7 +40,6 @@ class APIClient: ObservableObject {
                 }
             }
 
-            // Fallback to ISO8601
             if let date = ISO8601DateFormatter().date(from: dateString) {
                 return date
             }
@@ -48,6 +49,12 @@ class APIClient: ObservableObject {
                 debugDescription: "Cannot decode date: \(dateString)"
             )
         }
+    }
+
+    private func authenticatedRequest(for url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        return request
     }
 
     func fetchPhotos(folder: String? = nil, limit: Int = 100, offset: Int = 0) async throws -> [Photo] {
@@ -61,19 +68,22 @@ class APIClient: ObservableObject {
         }
         components.queryItems = queryItems
 
-        let (data, _) = try await session.data(from: components.url!)
+        let request = authenticatedRequest(for: components.url!)
+        let (data, _) = try await session.data(for: request)
         return try decoder.decode([Photo].self, from: data)
     }
 
     func fetchFolders() async throws -> [Folder] {
         let url = URL(string: "\(baseURL)/api/folders")!
-        let (data, _) = try await session.data(from: url)
+        let request = authenticatedRequest(for: url)
+        let (data, _) = try await session.data(for: request)
         return try decoder.decode([Folder].self, from: data)
     }
 
     func fetchStats() async throws -> Stats {
         let url = URL(string: "\(baseURL)/api/stats")!
-        let (data, _) = try await session.data(from: url)
+        let request = authenticatedRequest(for: url)
+        let (data, _) = try await session.data(for: request)
         return try decoder.decode(Stats.self, from: data)
     }
 
@@ -85,15 +95,22 @@ class APIClient: ObservableObject {
         URL(string: "\(baseURL)/api/photos/\(photo.id)/original")!
     }
 
+    func fetchImage(_ url: URL) async throws -> NSImage {
+        let request = authenticatedRequest(for: url)
+        let (data, _) = try await session.data(for: request)
+        guard let image = NSImage(data: data) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        return image
+    }
+
     func downloadOriginal(_ photo: Photo, to directory: URL) async throws -> URL {
         let url = originalURL(for: photo)
-        let (tempURL, _) = try await session.download(from: url)
+        let request = authenticatedRequest(for: url)
+        let (tempURL, _) = try await session.download(for: request)
 
         let destination = directory.appendingPathComponent(photo.filename)
-
-        // Remove existing file if present
         try? FileManager.default.removeItem(at: destination)
-
         try FileManager.default.moveItem(at: tempURL, to: destination)
         return destination
     }

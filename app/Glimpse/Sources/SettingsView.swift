@@ -17,13 +17,15 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     TextField("http://server:8080", text: $settings.serverURL)
                         .textFieldStyle(.roundedBorder)
-                        .onSubmit { saveAndTest() }
+
+                    SecureField("API Key", text: $settings.apiKey)
+                        .textFieldStyle(.roundedBorder)
 
                     HStack {
-                        Button("Save & Connect") {
-                            saveAndTest()
+                        Button("Test Connection") {
+                            testConnection()
                         }
-                        .disabled(testingConnection || settings.serverURL.isEmpty)
+                        .disabled(testingConnection || settings.serverURL.isEmpty || settings.apiKey.isEmpty)
 
                         if testingConnection {
                             ProgressView()
@@ -84,16 +86,15 @@ struct SettingsView: View {
             }
             .font(.caption)
         }
-        .frame(width: 420, height: 280)
+        .frame(width: 420, height: 320)
         .padding()
     }
 
-    private func saveAndTest() {
+    private func testConnection() {
         testingConnection = true
         connectionStatus = .unknown
-        settings.needsRefresh = true
 
-        let client = APIClient(baseURL: settings.serverURL)
+        let client = APIClient(baseURL: settings.serverURL, apiKey: settings.apiKey)
 
         Task {
             do {
@@ -101,6 +102,7 @@ struct SettingsView: View {
                 await MainActor.run {
                     connectionStatus = .success(stats: stats)
                     testingConnection = false
+                    settings.needsRefresh = true
                 }
             } catch {
                 await MainActor.run {
