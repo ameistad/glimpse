@@ -44,12 +44,6 @@ struct ContentView: View {
         .searchable(text: $searchText, prompt: "Filter photos")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: refresh) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("Refresh")
-            }
-            ToolbarItem(placement: .primaryAction) {
                 Button(action: triggerRescan) {
                     if isScanning {
                         ProgressView()

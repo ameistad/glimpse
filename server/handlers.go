@@ -126,13 +126,14 @@ func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
 }
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	if !h.scanner.TryScan() {
 		w.WriteHeader(http.StatusConflict)
-		h.jsonResponse(w, map[string]string{"status": "already_running"})
+		json.NewEncoder(w).Encode(map[string]string{"status": "already_running"})
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
-	h.jsonResponse(w, map[string]string{"status": "started"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 }
 
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path, contentType string) {
