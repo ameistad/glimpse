@@ -7,26 +7,14 @@ import (
 )
 
 type Config struct {
-	// Path to the directory containing original RAW photos
-	OriginalsPath string `json:"originals_path"`
-
-	// Path to the directory where thumbnails will be stored
-	ThumbnailsPath string `json:"thumbnails_path"`
-
-	// Path to the SQLite database file
-	DatabasePath string `json:"database_path"`
-
-	// Address to listen on (e.g., ":8080" or "0.0.0.0:8080")
-	ListenAddr string `json:"listen_addr"`
-
-	// Interval between directory scans
-	ScanInterval time.Duration `json:"scan_interval"`
-
-	// Thumbnail size (max dimension)
-	ThumbnailSize int `json:"thumbnail_size"`
-
-	// Supported RAW file extensions (lowercase, with dot)
-	RawExtensions []string `json:"raw_extensions"`
+	OriginalsPath  string        `json:"originals_path"`
+	ThumbnailsPath string        `json:"thumbnails_path"`
+	DatabasePath   string        `json:"database_path"`
+	ListenAddr     string        `json:"listen_addr"`
+	ScanInterval   time.Duration `json:"scan_interval"`
+	ThumbnailSize  int           `json:"thumbnail_size"`
+	RawExtensions  []string      `json:"raw_extensions"`
+	VideoExtensions []string     `json:"video_extensions"`
 }
 
 type configJSON struct {
@@ -37,6 +25,7 @@ type configJSON struct {
 	ScanIntervalSec int      `json:"scan_interval_seconds"`
 	ThumbnailSize   int      `json:"thumbnail_size"`
 	RawExtensions   []string `json:"raw_extensions"`
+	VideoExtensions []string `json:"video_extensions"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -55,13 +44,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		OriginalsPath:  cj.OriginalsPath,
-		ThumbnailsPath: cj.ThumbnailsPath,
-		DatabasePath:   cj.DatabasePath,
-		ListenAddr:     cj.ListenAddr,
-		ScanInterval:   time.Duration(cj.ScanIntervalSec) * time.Second,
-		ThumbnailSize:  cj.ThumbnailSize,
-		RawExtensions:  cj.RawExtensions,
+		OriginalsPath:   cj.OriginalsPath,
+		ThumbnailsPath:  cj.ThumbnailsPath,
+		DatabasePath:    cj.DatabasePath,
+		ListenAddr:      cj.ListenAddr,
+		ScanInterval:    time.Duration(cj.ScanIntervalSec) * time.Second,
+		ThumbnailSize:   cj.ThumbnailSize,
+		RawExtensions:   cj.RawExtensions,
+		VideoExtensions: cj.VideoExtensions,
 	}
 
 	// Apply defaults for empty values
@@ -86,19 +76,23 @@ func LoadConfig(path string) (*Config, error) {
 	if len(cfg.RawExtensions) == 0 {
 		cfg.RawExtensions = DefaultRawExtensions()
 	}
+	if len(cfg.VideoExtensions) == 0 {
+		cfg.VideoExtensions = DefaultVideoExtensions()
+	}
 
 	return cfg, nil
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		OriginalsPath:  "/pool/photos/originals",
-		ThumbnailsPath: "/pool/thumbnails",
-		DatabasePath:   "/pool/thumbnails/glimpse.db",
-		ListenAddr:     ":8080",
-		ScanInterval:   1 * time.Hour,
-		ThumbnailSize:  800,
-		RawExtensions:  DefaultRawExtensions(),
+		OriginalsPath:   "/pool/photos/originals",
+		ThumbnailsPath:  "/pool/thumbnails",
+		DatabasePath:    "/pool/thumbnails/glimpse.db",
+		ListenAddr:      ":8080",
+		ScanInterval:    1 * time.Hour,
+		ThumbnailSize:   800,
+		RawExtensions:   DefaultRawExtensions(),
+		VideoExtensions: DefaultVideoExtensions(),
 	}
 }
 
@@ -127,6 +121,19 @@ func DefaultRawExtensions() []string {
 	}
 }
 
+func DefaultVideoExtensions() []string {
+	return []string{
+		".mp4",
+		".mov",
+		".mkv",
+		".avi",
+		".webm",
+		".m4v",
+		".wmv",
+		".flv",
+	}
+}
+
 func (c *Config) SaveExample(path string) error {
 	cj := configJSON{
 		OriginalsPath:   c.OriginalsPath,
@@ -136,6 +143,7 @@ func (c *Config) SaveExample(path string) error {
 		ScanIntervalSec: int(c.ScanInterval.Seconds()),
 		ThumbnailSize:   c.ThumbnailSize,
 		RawExtensions:   c.RawExtensions,
+		VideoExtensions: c.VideoExtensions,
 	}
 
 	data, err := json.MarshalIndent(cj, "", "  ")

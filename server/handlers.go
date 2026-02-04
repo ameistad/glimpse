@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Handler struct {
@@ -21,6 +23,7 @@ func NewHandler(cfg *Config, db *Database, scanner *Scanner) *Handler {
 
 func (h *Handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 	folder := r.URL.Query().Get("folder")
+	mediaType := r.URL.Query().Get("media_type")
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 1000 {
@@ -32,7 +35,7 @@ func (h *Handler) ListPhotos(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	photos, err := h.db.ListPhotos(folder, limit, offset)
+	photos, err := h.db.ListPhotos(folder, mediaType, limit, offset)
 	if err != nil {
 		log.Printf("Error listing photos: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -91,9 +94,36 @@ func (h *Handler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set content-disposition for download
+	if photo.MediaType == "video" {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+photo.Filename+"\"")
+		h.serveFileWithRanges(w, r, photo.OriginalPath, photo.Filename)
+		return
+	}
+
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+photo.Filename+"\"")
 	h.serveFile(w, r, photo.OriginalPath, "application/octet-stream")
+}
+
+func (h *Handler) StreamVideo(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	photo, err := h.db.GetPhotoByID(id)
+	if err != nil {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	if photo.MediaType != "video" {
+		http.Error(w, "Not a video", http.StatusBadRequest)
+		return
+	}
+
+	h.serveFileWithRanges(w, r, photo.OriginalPath, photo.Filename)
 }
 
 func (h *Handler) ListFolders(w http.ResponseWriter, r *http.Request) {
@@ -154,4 +184,44 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path, conten
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 
 	io.Copy(w, file)
+}
+
+func (h *Handler) serveFileWithRanges(w http.ResponseWriter, r *http.Request, path, filename string) {
+	file, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", videoContentType(filepath.Ext(filename)))
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, filename, stat.ModTime(), file)
+}
+
+func videoContentType(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mkv":
+		return "video/x-matroska"
+	case ".avi":
+		return "video/x-msvideo"
+	case ".wmv":
+		return "video/x-ms-wmv"
+	case ".flv":
+		return "video/x-flv"
+	default:
+		return "application/octet-stream"
+	}
 }

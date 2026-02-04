@@ -85,6 +85,10 @@ class APIClient: ObservableObject {
         URL(string: "\(baseURL)/api/photos/\(photo.id)/original")!
     }
 
+    func streamURL(for photo: Photo) -> URL {
+        URL(string: "\(baseURL)/api/photos/\(photo.id)/stream")!
+    }
+
     func triggerScan() async throws -> String {
         let url = URL(string: "\(baseURL)/api/scan")!
         var request = URLRequest(url: url)

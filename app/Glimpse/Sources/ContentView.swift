@@ -33,6 +33,7 @@ struct ContentView: View {
                 PhotoDetailView(
                     photo: photo,
                     thumbnailURL: viewModel.apiClient?.thumbnailURL(for: photo),
+                    streamURL: photo.isVideo ? viewModel.apiClient?.streamURL(for: photo) : nil,
                     onDownload: { downloadPhoto(photo) }
                 )
             } else {
@@ -59,7 +60,7 @@ struct ContentView: View {
                     }
                 }
                 .disabled(isScanning)
-                .help("Rescan library for new photos")
+                .help("Rescan library")
             }
         }
         .onAppear {

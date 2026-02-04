@@ -62,26 +62,54 @@ struct PhotoThumbnail: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView()
-                        .frame(width: 140, height: 140)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 140, height: 140)
-                        .clipped()
-                case .failure:
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                        .frame(width: 140, height: 140)
-                @unknown default:
-                    EmptyView()
+            ZStack {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(width: 140, height: 140)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 140, height: 140)
+                            .clipped()
+                    case .failure:
+                        Image(systemName: photo.isVideo ? "film" : "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                            .frame(width: 140, height: 140)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+
+                if photo.isVideo {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 32))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.5))
+
+                    if let duration = photo.durationFormatted {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Text(duration)
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(.black.opacity(0.7))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(3)
+                                    .padding(4)
+                            }
+                        }
+                    }
                 }
             }
+            .frame(width: 140, height: 140)
             .cornerRadius(6)
             .overlay(
                 RoundedRectangle(cornerRadius: 6)

@@ -1,43 +1,100 @@
 import SwiftUI
+import AVKit
 
 struct PhotoDetailView: View {
     let photo: Photo
     let thumbnailURL: URL?
+    let streamURL: URL?
     let onDownload: () -> Void
 
     @State private var isDownloading = false
+    @State private var player: AVPlayer?
 
     var body: some View {
         VStack(spacing: 0) {
-            // Large preview
-            AsyncImage(url: thumbnailURL) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .failure:
-                    VStack {
-                        Image(systemName: "photo")
-                            .font(.system(size: 64))
-                            .foregroundColor(.secondary)
-                        Text("Failed to load preview")
-                            .foregroundColor(.secondary)
-                    }
+            if photo.isVideo && photo.isNativelyPlayable, let streamURL = streamURL {
+                VideoPlayer(player: player)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                @unknown default:
-                    EmptyView()
-                }
-            }
-            .background(Color.black.opacity(0.05))
+                    .onAppear {
+                        player = AVPlayer(url: streamURL)
+                    }
+                    .onDisappear {
+                        player?.pause()
+                        player = nil
+                    }
+                    .onChange(of: photo.id) { _, _ in
+                        player?.pause()
+                        if let streamURL = self.streamURL {
+                            player = AVPlayer(url: streamURL)
+                        }
+                    }
+            } else if photo.isVideo {
+                ZStack {
+                    AsyncImage(url: thumbnailURL) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        case .failure:
+                            VStack {
+                                Image(systemName: "film")
+                                    .font(.system(size: 64))
+                                    .foregroundColor(.secondary)
+                                Text("Failed to load preview")
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
 
-            // Info panel
+                    VStack(spacing: 8) {
+                        Image(systemName: "play.slash")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white)
+                        Text("Download to play this format")
+                            .font(.callout)
+                            .foregroundColor(.white)
+                    }
+                    .padding()
+                    .background(.black.opacity(0.5))
+                    .cornerRadius(12)
+                }
+                .background(Color.black.opacity(0.05))
+            } else {
+                AsyncImage(url: thumbnailURL) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .failure:
+                        VStack {
+                            Image(systemName: "photo")
+                                .font(.system(size: 64))
+                                .foregroundColor(.secondary)
+                            Text("Failed to load preview")
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .background(Color.black.opacity(0.05))
+            }
+
             VStack(alignment: .leading, spacing: 12) {
-                // Filename
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(photo.filename)
@@ -56,7 +113,6 @@ struct PhotoDetailView: View {
                     Button(action: {
                         isDownloading = true
                         onDownload()
-                        // Reset after a delay (actual completion is async)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             isDownloading = false
                         }
@@ -65,7 +121,8 @@ struct PhotoDetailView: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Label("Download RAW", systemImage: "arrow.down.circle")
+                            Label(photo.isVideo ? "Download Video" : "Download RAW",
+                                  systemImage: "arrow.down.circle")
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -74,7 +131,6 @@ struct PhotoDetailView: View {
 
                 Divider()
 
-                // Metadata grid
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible())
@@ -83,7 +139,22 @@ struct PhotoDetailView: View {
                     MetadataRow(label: "Format", value: photo.extension.uppercased())
 
                     if let width = photo.width, let height = photo.height, width > 0, height > 0 {
-                        MetadataRow(label: "Dimensions", value: "\(width) × \(height)")
+                        MetadataRow(label: "Dimensions", value: "\(width) \u{00d7} \(height)")
+                    }
+
+                    if photo.isVideo {
+                        if let duration = photo.durationFormatted {
+                            MetadataRow(label: "Duration", value: duration)
+                        }
+                        if let codec = photo.videoCodec, !codec.isEmpty {
+                            MetadataRow(label: "Video Codec", value: codec.uppercased())
+                        }
+                        if let codec = photo.audioCodec, !codec.isEmpty {
+                            MetadataRow(label: "Audio Codec", value: codec.uppercased())
+                        }
+                        if let fps = photo.framerate, fps > 0 {
+                            MetadataRow(label: "Framerate", value: String(format: "%.1f fps", fps))
+                        }
                     }
 
                     MetadataRow(label: "Modified", value: formatDate(photo.modTime))
