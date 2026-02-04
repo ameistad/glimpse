@@ -25,6 +25,7 @@ struct ContentView: View {
                 folderName: selectedFolder?.displayName ?? "All Photos",
                 photoCount: filteredPhotos.count,
                 onLoadMore: loadMorePhotos,
+                apiClient: viewModel.apiClient,
                 thumbnailURL: { viewModel.apiClient?.thumbnailURL(for: $0) }
             )
             .frame(minWidth: 400)
@@ -32,6 +33,7 @@ struct ContentView: View {
             if let photo = selectedPhoto {
                 PhotoDetailView(
                     photo: photo,
+                    apiClient: viewModel.apiClient,
                     thumbnailURL: viewModel.apiClient?.thumbnailURL(for: photo),
                     onDownload: { downloadPhoto(photo) }
                 )
@@ -63,13 +65,13 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            viewModel.configure(serverURL: settings.serverURL)
+            viewModel.configure(serverURL: settings.serverURL, apiKey: settings.apiKey)
             refresh()
         }
         .onChange(of: settings.needsRefresh) { _, newValue in
             if newValue {
                 settings.needsRefresh = false
-                viewModel.configure(serverURL: settings.serverURL)
+                viewModel.configure(serverURL: settings.serverURL, apiKey: settings.apiKey)
                 refresh()
             }
         }
@@ -147,7 +149,6 @@ struct ContentView: View {
         Task {
             do {
                 let savedURL = try await apiClient.downloadOriginal(photo, to: downloadURL)
-                // Open in Finder
                 NSWorkspace.shared.activateFileViewerSelecting([savedURL])
             } catch {
                 errorMessage = "Download failed: \(error.localizedDescription)"
@@ -175,12 +176,12 @@ class PhotosViewModel: ObservableObject {
         hasMore = true
     }
 
-    func configure(serverURL: String) {
+    func configure(serverURL: String, apiKey: String) {
         guard !serverURL.isEmpty, URL(string: serverURL) != nil else {
             apiClient = nil
             return
         }
-        apiClient = APIClient(baseURL: serverURL)
+        apiClient = APIClient(baseURL: serverURL, apiKey: apiKey)
     }
 
     func fetchPhotos(folder: String? = nil) async throws {

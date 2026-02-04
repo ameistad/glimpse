@@ -7,26 +7,14 @@ import (
 )
 
 type Config struct {
-	// Path to the directory containing original RAW photos
-	OriginalsPath string `json:"originals_path"`
-
-	// Path to the directory where thumbnails will be stored
-	ThumbnailsPath string `json:"thumbnails_path"`
-
-	// Path to the SQLite database file
-	DatabasePath string `json:"database_path"`
-
-	// Address to listen on (e.g., ":8080" or "0.0.0.0:8080")
-	ListenAddr string `json:"listen_addr"`
-
-	// Interval between directory scans
-	ScanInterval time.Duration `json:"scan_interval"`
-
-	// Thumbnail size (max dimension)
-	ThumbnailSize int `json:"thumbnail_size"`
-
-	// Supported RAW file extensions (lowercase, with dot)
-	RawExtensions []string `json:"raw_extensions"`
+	OriginalsPath  string        `json:"originals_path"`
+	ThumbnailsPath string        `json:"thumbnails_path"`
+	DatabasePath   string        `json:"database_path"`
+	ListenAddr     string        `json:"listen_addr"`
+	ScanInterval   time.Duration `json:"scan_interval"`
+	ThumbnailSize  int           `json:"thumbnail_size"`
+	RawExtensions  []string      `json:"raw_extensions"`
+	APIKey         string        `json:"api_key"`
 }
 
 type configJSON struct {
@@ -37,6 +25,7 @@ type configJSON struct {
 	ScanIntervalSec int      `json:"scan_interval_seconds"`
 	ThumbnailSize   int      `json:"thumbnail_size"`
 	RawExtensions   []string `json:"raw_extensions"`
+	APIKey          string   `json:"api_key"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -62,6 +51,7 @@ func LoadConfig(path string) (*Config, error) {
 		ScanInterval:   time.Duration(cj.ScanIntervalSec) * time.Second,
 		ThumbnailSize:  cj.ThumbnailSize,
 		RawExtensions:  cj.RawExtensions,
+		APIKey:         cj.APIKey,
 	}
 
 	// Apply defaults for empty values
@@ -136,6 +126,7 @@ func (c *Config) SaveExample(path string) error {
 		ScanIntervalSec: int(c.ScanInterval.Seconds()),
 		ThumbnailSize:   c.ThumbnailSize,
 		RawExtensions:   c.RawExtensions,
+		APIKey:          c.APIKey,
 	}
 
 	data, err := json.MarshalIndent(cj, "", "  ")

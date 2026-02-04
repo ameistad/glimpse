@@ -6,6 +6,7 @@ struct PhotoGridView: View {
     let folderName: String
     let photoCount: Int
     let onLoadMore: () -> Void
+    let apiClient: APIClient?
     let thumbnailURL: (Photo) -> URL?
 
     @State private var gridSize: CGFloat = 150
@@ -35,6 +36,7 @@ struct PhotoGridView: View {
                 ForEach(photos) { photo in
                     PhotoThumbnail(
                         photo: photo,
+                        client: apiClient,
                         url: thumbnailURL(photo),
                         isSelected: selectedPhoto?.id == photo.id
                     )
@@ -42,7 +44,6 @@ struct PhotoGridView: View {
                         selectedPhoto = photo
                     }
                     .onAppear {
-                        // Load more when reaching end
                         if photo.id == photos.last?.id {
                             onLoadMore()
                         }
@@ -57,38 +58,20 @@ struct PhotoGridView: View {
 
 struct PhotoThumbnail: View {
     let photo: Photo
+    let client: APIClient?
     let url: URL?
     let isSelected: Bool
 
     var body: some View {
         VStack(spacing: 4) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView()
-                        .frame(width: 140, height: 140)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 140, height: 140)
-                        .clipped()
-                case .failure:
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
-                        .frame(width: 140, height: 140)
-                @unknown default:
-                    EmptyView()
-                }
-            }
-            .cornerRadius(6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
-            )
-            .shadow(color: isSelected ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.1),
-                    radius: isSelected ? 4 : 2)
+            AuthenticatedImage(client: client, url: url, width: 140, height: 140)
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
+                )
+                .shadow(color: isSelected ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.1),
+                        radius: isSelected ? 4 : 2)
 
             Text(photo.filename)
                 .font(.caption2)

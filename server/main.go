@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -63,8 +65,7 @@ func main() {
 	mux.HandleFunc("GET /api/stats", handler.GetStats)
 	mux.HandleFunc("POST /api/scan", handler.TriggerScan)
 
-	// CORS middleware for development
-	corsHandler := corsMiddleware(mux)
+	corsHandler := corsMiddleware(apiKeyMiddleware(cfg.APIKey, mux))
 
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
@@ -97,13 +98,27 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+func apiKeyMiddleware(apiKey string, next http.Handler) http.Handler {
+	expected := []byte(apiKey)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		provided := []byte(r.Header.Get("X-API-Key"))
+		if len(expected) == 0 || subtle.ConstantTimeCompare(provided, expected) != 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

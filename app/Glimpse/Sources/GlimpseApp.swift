@@ -22,6 +22,7 @@ struct GlimpseApp: App {
 
 class AppSettings: ObservableObject {
     @AppStorage("serverURL") var serverURL: String = ""
+    @AppStorage("apiKey") var apiKey: String = ""
     @AppStorage("downloadPath") var downloadPath: String = ""
     @Published var needsRefresh: Bool = false
 
