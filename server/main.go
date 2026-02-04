@@ -61,6 +61,7 @@ func main() {
 	mux.HandleFunc("GET /api/photos/{id}", handler.GetPhoto)
 	mux.HandleFunc("GET /api/photos/{id}/thumbnail", handler.GetThumbnail)
 	mux.HandleFunc("GET /api/photos/{id}/original", handler.GetOriginal)
+	mux.HandleFunc("GET /api/photos/{id}/stream", handler.StreamVideo)
 	mux.HandleFunc("GET /api/folders", handler.ListFolders)
 	mux.HandleFunc("GET /api/stats", handler.GetStats)
 	mux.HandleFunc("POST /api/scan", handler.TriggerScan)

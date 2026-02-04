@@ -64,14 +64,42 @@ struct PhotoThumbnail: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            AuthenticatedImage(client: client, url: url, width: 140, height: 140)
-                .cornerRadius(6)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
-                )
-                .shadow(color: isSelected ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.1),
-                        radius: isSelected ? 4 : 2)
+            ZStack {
+                AuthenticatedImage(client: client, url: url, width: 140, height: 140)
+
+                if photo.isVideo {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 32))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.5))
+
+                    if let duration = photo.durationFormatted {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Text(duration)
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(.black.opacity(0.7))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(3)
+                                    .padding(4)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: 140, height: 140)
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
+            )
+            .shadow(color: isSelected ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.1),
+                    radius: isSelected ? 4 : 2)
 
             Text(photo.filename)
                 .font(.caption2)

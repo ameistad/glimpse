@@ -27,5 +27,15 @@
     ".jpg",
     ".jpeg",
     ".png"
+  ],
+  "video_extensions": [
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".webm",
+    ".m4v",
+    ".wmv",
+    ".flv"
   ]
 }

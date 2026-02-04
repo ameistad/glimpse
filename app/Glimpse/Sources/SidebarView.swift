@@ -9,7 +9,7 @@ struct SidebarView: View {
         List {
             Section("Library") {
                 Button(action: { selectedFolder = nil }) {
-                    Label("All Photos", systemImage: "photo.on.rectangle")
+                    Label("All Media", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                 }
@@ -38,6 +38,7 @@ struct SidebarView: View {
                 Section("Stats") {
                     VStack(alignment: .leading, spacing: 4) {
                         StatRow(label: "Photos", value: "\(stats.totalPhotos)")
+                        StatRow(label: "Videos", value: "\(stats.totalVideos)")
                         StatRow(label: "Folders", value: "\(stats.totalFolders)")
                         StatRow(label: "Total Size", value: formatSize(stats.totalOriginalMB))
                     }

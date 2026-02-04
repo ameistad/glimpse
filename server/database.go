@@ -19,6 +19,11 @@ type Photo struct {
 	Width         int       `json:"width,omitempty"`
 	Height        int       `json:"height,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
+	MediaType     string    `json:"media_type"`
+	Duration      float64   `json:"duration,omitempty"`
+	VideoCodec    string    `json:"video_codec,omitempty"`
+	AudioCodec    string    `json:"audio_codec,omitempty"`
+	Framerate     float64   `json:"framerate,omitempty"`
 }
 
 type Folder struct {
@@ -28,6 +33,7 @@ type Folder struct {
 
 type Stats struct {
 	TotalPhotos     int   `json:"total_photos"`
+	TotalVideos     int   `json:"total_videos"`
 	TotalFolders    int   `json:"total_folders"`
 	TotalOriginalMB int64 `json:"total_original_mb"`
 }
@@ -78,68 +84,86 @@ func (d *Database) migrate() error {
 		CREATE INDEX IF NOT EXISTS idx_photos_mod_time ON photos(mod_time);
 		CREATE INDEX IF NOT EXISTS idx_photos_filename ON photos(filename);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	for _, stmt := range []string{
+		`ALTER TABLE photos ADD COLUMN media_type TEXT NOT NULL DEFAULT 'photo'`,
+		`ALTER TABLE photos ADD COLUMN duration REAL DEFAULT 0`,
+		`ALTER TABLE photos ADD COLUMN video_codec TEXT DEFAULT ''`,
+		`ALTER TABLE photos ADD COLUMN audio_codec TEXT DEFAULT ''`,
+		`ALTER TABLE photos ADD COLUMN framerate REAL DEFAULT 0`,
+	} {
+		d.db.Exec(stmt)
+	}
+	d.db.Exec(`CREATE INDEX IF NOT EXISTS idx_photos_media_type ON photos(media_type)`)
+
+	return nil
 }
 
 func (d *Database) UpsertPhoto(p *Photo) error {
 	_, err := d.db.Exec(`
-		INSERT INTO photos (original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO photos (original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, media_type, duration, video_codec, audio_codec, framerate)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(original_path) DO UPDATE SET
 			thumbnail_path = excluded.thumbnail_path,
 			file_size = excluded.file_size,
 			mod_time = excluded.mod_time,
 			width = excluded.width,
-			height = excluded.height
-	`, p.OriginalPath, p.ThumbnailPath, p.Folder, p.Filename, p.Extension, p.FileSize, p.ModTime, p.Width, p.Height)
+			height = excluded.height,
+			media_type = excluded.media_type,
+			duration = excluded.duration,
+			video_codec = excluded.video_codec,
+			audio_codec = excluded.audio_codec,
+			framerate = excluded.framerate
+	`, p.OriginalPath, p.ThumbnailPath, p.Folder, p.Filename, p.Extension, p.FileSize, p.ModTime, p.Width, p.Height, p.MediaType, p.Duration, p.VideoCodec, p.AudioCodec, p.Framerate)
 	return err
 }
 
-func (d *Database) GetPhotoByID(id int64) (*Photo, error) {
+const photoColumns = `id, original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, created_at, media_type, duration, video_codec, audio_codec, framerate`
+
+func scanPhoto(scanner interface{ Scan(...any) error }) (*Photo, error) {
 	p := &Photo{}
-	err := d.db.QueryRow(`
-		SELECT id, original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, created_at
-		FROM photos WHERE id = ?
-	`, id).Scan(&p.ID, &p.OriginalPath, &p.ThumbnailPath, &p.Folder, &p.Filename, &p.Extension, &p.FileSize, &p.ModTime, &p.Width, &p.Height, &p.CreatedAt)
+	err := scanner.Scan(&p.ID, &p.OriginalPath, &p.ThumbnailPath, &p.Folder, &p.Filename, &p.Extension, &p.FileSize, &p.ModTime, &p.Width, &p.Height, &p.CreatedAt, &p.MediaType, &p.Duration, &p.VideoCodec, &p.AudioCodec, &p.Framerate)
 	if err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+func (d *Database) GetPhotoByID(id int64) (*Photo, error) {
+	return scanPhoto(d.db.QueryRow(`SELECT `+photoColumns+` FROM photos WHERE id = ?`, id))
 }
 
 func (d *Database) GetPhotoByPath(path string) (*Photo, error) {
-	p := &Photo{}
-	err := d.db.QueryRow(`
-		SELECT id, original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, created_at
-		FROM photos WHERE original_path = ?
-	`, path).Scan(&p.ID, &p.OriginalPath, &p.ThumbnailPath, &p.Folder, &p.Filename, &p.Extension, &p.FileSize, &p.ModTime, &p.Width, &p.Height, &p.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
+	return scanPhoto(d.db.QueryRow(`SELECT `+photoColumns+` FROM photos WHERE original_path = ?`, path))
 }
 
-func (d *Database) ListPhotos(folder string, limit, offset int) ([]*Photo, error) {
-	var rows *sql.Rows
-	var err error
+func (d *Database) ListPhotos(folder, mediaType string, limit, offset int) ([]*Photo, error) {
+	query := `SELECT ` + photoColumns + ` FROM photos`
+	var args []any
+	var conditions []string
 
 	if folder != "" {
-		rows, err = d.db.Query(`
-			SELECT id, original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, created_at
-			FROM photos
-			WHERE folder = ? OR folder LIKE ?
-			ORDER BY mod_time DESC
-			LIMIT ? OFFSET ?
-		`, folder, folder+"/%", limit, offset)
-	} else {
-		rows, err = d.db.Query(`
-			SELECT id, original_path, thumbnail_path, folder, filename, extension, file_size, mod_time, width, height, created_at
-			FROM photos
-			ORDER BY mod_time DESC
-			LIMIT ? OFFSET ?
-		`, limit, offset)
+		conditions = append(conditions, `(folder = ? OR folder LIKE ?)`)
+		args = append(args, folder, folder+"/%")
+	}
+	if mediaType != "" {
+		conditions = append(conditions, `media_type = ?`)
+		args = append(args, mediaType)
 	}
 
+	if len(conditions) > 0 {
+		query += " WHERE " + conditions[0]
+		for _, c := range conditions[1:] {
+			query += " AND " + c
+		}
+	}
+	query += ` ORDER BY mod_time DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := d.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,8 +171,8 @@ func (d *Database) ListPhotos(folder string, limit, offset int) ([]*Photo, error
 
 	var photos []*Photo
 	for rows.Next() {
-		p := &Photo{}
-		if err := rows.Scan(&p.ID, &p.OriginalPath, &p.ThumbnailPath, &p.Folder, &p.Filename, &p.Extension, &p.FileSize, &p.ModTime, &p.Width, &p.Height, &p.CreatedAt); err != nil {
+		p, err := scanPhoto(rows)
+		if err != nil {
 			return nil, err
 		}
 		photos = append(photos, p)
@@ -184,7 +208,12 @@ func (d *Database) ListFolders() ([]*Folder, error) {
 func (d *Database) GetStats() (*Stats, error) {
 	s := &Stats{}
 
-	err := d.db.QueryRow(`SELECT COUNT(*) FROM photos`).Scan(&s.TotalPhotos)
+	err := d.db.QueryRow(`SELECT COUNT(*) FROM photos WHERE media_type = 'photo'`).Scan(&s.TotalPhotos)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRow(`SELECT COUNT(*) FROM photos WHERE media_type = 'video'`).Scan(&s.TotalVideos)
 	if err != nil {
 		return nil, err
 	}

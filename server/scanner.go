@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -73,14 +75,12 @@ func (s *Scanner) Scan() error {
 			return nil
 		}
 
-		// Get file info
 		info, err := d.Info()
 		if err != nil {
 			log.Printf("Error getting info for %s: %v", path, err)
 			return nil
 		}
 
-		// Check if already processed with same mod time
 		exists, err := s.db.PhotoExists(path, info.ModTime())
 		if err != nil {
 			log.Printf("Error checking existence for %s: %v", path, err)
@@ -90,8 +90,11 @@ func (s *Scanner) Scan() error {
 			return nil
 		}
 
-		// Process the photo
-		if err := s.processPhoto(path, info); err != nil {
+		if s.isVideoExtension(ext) {
+			if err := s.processVideo(path, info); err != nil {
+				log.Printf("Error processing video %s: %v", path, err)
+			}
+		} else if err := s.processPhoto(path, info); err != nil {
 			log.Printf("Error processing %s: %v", path, err)
 		}
 
@@ -130,6 +133,15 @@ func (s *Scanner) isSupportedExtension(ext string) bool {
 		return true
 	}
 	for _, supported := range s.cfg.RawExtensions {
+		if ext == supported {
+			return true
+		}
+	}
+	return s.isVideoExtension(ext)
+}
+
+func (s *Scanner) isVideoExtension(ext string) bool {
+	for _, supported := range s.cfg.VideoExtensions {
 		if ext == supported {
 			return true
 		}
@@ -194,7 +206,6 @@ func (s *Scanner) processPhoto(path string, info fs.FileInfo) error {
 		folder = ""
 	}
 
-	// Store in database
 	photo := &Photo{
 		OriginalPath:  path,
 		ThumbnailPath: thumbPath,
@@ -205,6 +216,7 @@ func (s *Scanner) processPhoto(path string, info fs.FileInfo) error {
 		ModTime:       info.ModTime(),
 		Width:         width,
 		Height:        height,
+		MediaType:     "photo",
 	}
 
 	return s.db.UpsertPhoto(photo)
@@ -292,4 +304,146 @@ func (s *Scanner) generateRawThumbnail(rawPath, thumbPath string) (width, height
 		}
 	}
 	return width, height, nil
+}
+
+type videoMetadata struct {
+	Width      int
+	Height     int
+	Duration   float64
+	VideoCodec string
+	AudioCodec string
+	Framerate  float64
+}
+
+func (s *Scanner) processVideo(path string, info fs.FileInfo) error {
+	log.Printf("Processing video: %s", path)
+
+	relPath, err := filepath.Rel(s.cfg.OriginalsPath, path)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	thumbRelPath := strings.TrimSuffix(relPath, filepath.Ext(relPath)) + ".jpg"
+	thumbPath := filepath.Join(s.cfg.ThumbnailsPath, thumbRelPath)
+
+	if err := os.MkdirAll(filepath.Dir(thumbPath), 0755); err != nil {
+		return fmt.Errorf("failed to create thumbnail directory: %w", err)
+	}
+
+	meta, err := s.generateVideoThumbnail(path, thumbPath)
+	if err != nil {
+		return fmt.Errorf("failed to generate video thumbnail: %w", err)
+	}
+
+	folder := filepath.Dir(relPath)
+	if folder == "." {
+		folder = ""
+	}
+
+	photo := &Photo{
+		OriginalPath:  path,
+		ThumbnailPath: thumbPath,
+		Folder:        folder,
+		Filename:      info.Name(),
+		Extension:     strings.ToLower(filepath.Ext(path)),
+		FileSize:      info.Size(),
+		ModTime:       info.ModTime(),
+		Width:         meta.Width,
+		Height:        meta.Height,
+		MediaType:     "video",
+		Duration:      meta.Duration,
+		VideoCodec:    meta.VideoCodec,
+		AudioCodec:    meta.AudioCodec,
+		Framerate:     meta.Framerate,
+	}
+
+	return s.db.UpsertPhoto(photo)
+}
+
+func (s *Scanner) generateVideoThumbnail(videoPath, thumbPath string) (*videoMetadata, error) {
+	meta := s.probeVideo(videoPath)
+
+	seekTime := "1"
+	if meta.Duration > 0 && meta.Duration < 4 {
+		seekTime = fmt.Sprintf("%.2f", meta.Duration*0.25)
+	}
+
+	size := fmt.Sprintf("%d", s.cfg.ThumbnailSize)
+
+	cmd := exec.Command("ffmpeg",
+		"-ss", seekTime,
+		"-i", videoPath,
+		"-vframes", "1",
+		"-vf", fmt.Sprintf("scale=%s:%s:force_original_aspect_ratio=decrease", size, size),
+		"-y",
+		thumbPath,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg thumbnail failed: %w: %s", err, output)
+	}
+
+	return meta, nil
+}
+
+func (s *Scanner) probeVideo(videoPath string) *videoMetadata {
+	meta := &videoMetadata{}
+
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		"-show_streams",
+		videoPath,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("ffprobe failed for %s: %v", videoPath, err)
+		return meta
+	}
+
+	var probe struct {
+		Streams []struct {
+			CodecType  string `json:"codec_type"`
+			CodecName  string `json:"codec_name"`
+			Width      int    `json:"width"`
+			Height     int    `json:"height"`
+			RFrameRate string `json:"r_frame_rate"`
+		} `json:"streams"`
+		Format struct {
+			Duration string `json:"duration"`
+		} `json:"format"`
+	}
+
+	if err := json.Unmarshal(output, &probe); err != nil {
+		log.Printf("ffprobe parse failed for %s: %v", videoPath, err)
+		return meta
+	}
+
+	if dur, err := strconv.ParseFloat(probe.Format.Duration, 64); err == nil {
+		meta.Duration = dur
+	}
+
+	for _, stream := range probe.Streams {
+		switch stream.CodecType {
+		case "video":
+			if meta.VideoCodec == "" {
+				meta.VideoCodec = stream.CodecName
+				meta.Width = stream.Width
+				meta.Height = stream.Height
+				if parts := strings.Split(stream.RFrameRate, "/"); len(parts) == 2 {
+					num, _ := strconv.ParseFloat(parts[0], 64)
+					den, _ := strconv.ParseFloat(parts[1], 64)
+					if den > 0 {
+						meta.Framerate = num / den
+					}
+				}
+			}
+		case "audio":
+			if meta.AudioCodec == "" {
+				meta.AudioCodec = stream.CodecName
+			}
+		}
+	}
+
+	return meta
 }
