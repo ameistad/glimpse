@@ -12,6 +12,8 @@ app/Glimpse/.swiftpm/
 xcuserdata/
 DerivedData/
 *.app
+*.dmg
+*.iconset
 
 # Config (may contain sensitive paths)
 server/config.json
