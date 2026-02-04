@@ -93,10 +93,20 @@ struct ContentView: View {
 
     private func refresh() {
         Task {
+            async let foldersResult: () = viewModel.fetchFolders()
+            async let statsResult: () = viewModel.fetchStats()
+
+            do { try await foldersResult } catch {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+            do { try await statsResult } catch {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+
+            viewModel.reset()
             do {
-                try await viewModel.fetchFolders()
-                try await viewModel.fetchStats()
-                viewModel.reset()
                 try await viewModel.fetchPhotos(folder: selectedFolder?.path)
             } catch {
                 errorMessage = error.localizedDescription

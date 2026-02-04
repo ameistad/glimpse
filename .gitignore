@@ -5,8 +5,8 @@ server/glimpse-server
 *.out
 
 # Swift
-app/Glimpse/.build/
-app/Glimpse/.swiftpm/
+Glimpse/.build/
+Glimpse/.swiftpm/
 *.xcodeproj
 *.xcworkspace
 xcuserdata/

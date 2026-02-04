@@ -169,7 +169,7 @@ func (d *Database) ListPhotos(folder, mediaType string, limit, offset int) ([]*P
 	}
 	defer rows.Close()
 
-	var photos []*Photo
+	photos := make([]*Photo, 0)
 	for rows.Next() {
 		p, err := scanPhoto(rows)
 		if err != nil {

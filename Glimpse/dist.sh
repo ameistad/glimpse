@@ -11,8 +11,9 @@ VERSION=$(grep CFBundleShortVersionString Info.plist -A1 | grep string | sed 's/
 echo "Building ${APP_NAME} v${VERSION}..."
 echo ""
 
-# Build release binary
-swift build -c release
+# Build release binary with embedded Info.plist for ATS
+swift build -c release \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$(pwd)/Info.plist"
 
 # Assemble app bundle
 rm -rf "${APP_BUNDLE}"

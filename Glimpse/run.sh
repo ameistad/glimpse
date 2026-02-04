@@ -5,7 +5,8 @@ cd "$(dirname "$0")"
 
 pkill -x Glimpse 2>/dev/null || true
 
-swift build -c release
+swift build -c release \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$(pwd)/Info.plist"
 
 mkdir -p Glimpse.app/Contents/MacOS
 mkdir -p Glimpse.app/Contents/Resources

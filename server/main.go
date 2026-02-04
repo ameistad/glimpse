@@ -114,7 +114,7 @@ func apiKeyMiddleware(apiKey string, next http.Handler) http.Handler {
 	expected := []byte(apiKey)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		provided := []byte(r.Header.Get("X-API-Key"))
-		if len(expected) == 0 || subtle.ConstantTimeCompare(provided, expected) != 1 {
+		if len(expected) > 0 && subtle.ConstantTimeCompare(provided, expected) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})

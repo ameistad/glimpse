@@ -157,7 +157,7 @@ sudo ufw allow 8080/tcp
 On your Mac (requires Xcode Command Line Tools):
 
 ```bash
-cd glimpse/app/Glimpse
+cd glimpse/Glimpse
 
 # Build debug version
 swift build

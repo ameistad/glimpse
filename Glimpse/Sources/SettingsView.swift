@@ -25,7 +25,7 @@ struct SettingsView: View {
                         Button("Test Connection") {
                             testConnection()
                         }
-                        .disabled(testingConnection || settings.serverURL.isEmpty || settings.apiKey.isEmpty)
+                        .disabled(testingConnection || settings.serverURL.isEmpty)
 
                         if testingConnection {
                             ProgressView()

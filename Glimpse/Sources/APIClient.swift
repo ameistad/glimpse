@@ -1,11 +1,22 @@
 import Foundation
 import AppKit
 
+class InsecureSessionDelegate: NSObject, URLSessionDelegate {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let trust = challenge.protectionSpace.serverTrust {
+            return (.useCredential, URLCredential(trust: trust))
+        }
+        return (.performDefaultHandling, nil)
+    }
+}
+
 class APIClient: ObservableObject {
     private let baseURL: String
     private let apiKey: String
     let session: URLSession
     private let decoder: JSONDecoder
+    private let sessionDelegate = InsecureSessionDelegate()
 
     init(baseURL: String, apiKey: String) {
         self.baseURL = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -14,7 +25,7 @@ class APIClient: ObservableObject {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 300
-        self.session = URLSession(configuration: config)
+        self.session = URLSession(configuration: config, delegate: sessionDelegate, delegateQueue: nil)
 
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .custom { decoder in
