@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Prevent committing binary/executable files
+# Checks all staged files (added, copied, modified, or renamed)
+
+BINARY_FOUND=0
+
+while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    [ ! -f "$file" ] && continue
+
+    if file "$file" | grep -qiE 'ELF|Mach-O|shared object'; then
+        echo "ERROR: Refusing to commit binary file: $file"
+        BINARY_FOUND=1
+    fi
+done < <(git diff --cached --name-only --no-renames --diff-filter=ACMR)
+
+if [ "$BINARY_FOUND" -eq 1 ]; then
+    echo ""
+    echo "Binary/executable files should not be committed to the repository."
+    echo "Add them to .gitignore or use 'git reset HEAD <file>' to unstage."
+    exit 1
+fi

@@ -1,8 +1,13 @@
-# Go
+# Go build output
 server/glimpse-server
+server/glimpse-server-linux
+server/server
 *.exe
 *.test
 *.out
+
+# Environment
+.env
 
 # Swift
 Glimpse/.build/
