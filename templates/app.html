@@ -239,7 +239,7 @@
 {{if .HasMore}}
 <div class="load-sentinel"
      hx-get="{{gridURL .Filter .NextOffset true}}"
-     hx-trigger="revealed"
+     hx-trigger="intersect once root:#grid-region threshold:0.1"
      hx-swap="outerHTML">
   Loading more...
 </div>

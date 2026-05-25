@@ -105,6 +105,32 @@ func TestHTMXGridPartialPushesCanonicalMediaURL(t *testing.T) {
 	}
 }
 
+func TestMediaGridInfiniteScrollUsesGridScrollContainer(t *testing.T) {
+	handler := newTestHandler(t, "")
+	for i := 0; i < defaultPageSize+1; i++ {
+		insertTestMediaItem(t, handler.db, "batch", "item-"+strconv.Itoa(i)+".jpg", MediaTypePhoto)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/media/grid?folder=batch", nil)
+	req.Header.Set("HX-Request", "true")
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("grid status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `class="load-sentinel"`) {
+		t.Fatalf("expected infinite scroll sentinel, got %q", body)
+	}
+	if !strings.Contains(body, `hx-get="/media/grid?append=1&amp;folder=batch&amp;offset=80"`) {
+		t.Fatalf("expected next page URL with append offset, got %q", body)
+	}
+	if !strings.Contains(body, `hx-trigger="intersect once root:#grid-region threshold:0.1"`) {
+		t.Fatalf("expected sentinel to observe the grid scroll container, got %q", body)
+	}
+}
+
 func TestMediaPageRendersReactiveMediaTypeToolbar(t *testing.T) {
 	handler := newTestHandler(t, "")
 
