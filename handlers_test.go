@@ -95,7 +95,61 @@ func TestHTMXGridPartialPushesCanonicalMediaURL(t *testing.T) {
 	}
 }
 
+func TestDevelopmentReloadEndpointIsDevOnlyAndAuthExempt(t *testing.T) {
+	handler := newTestHandler(t, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/__dev/reload-version", nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("production reload endpoint status = %d, want 404", res.Code)
+	}
+
+	handler = newTestHandlerWithDevelopment(t, "secret", true)
+	req = httptest.NewRequest(http.MethodGet, "/__dev/reload-version", nil)
+	res = httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("development reload endpoint status = %d, want 200", res.Code)
+	}
+	if got := res.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if !strings.Contains(res.Body.String(), "version") {
+		t.Fatalf("expected version JSON, got %q", res.Body.String())
+	}
+}
+
+func TestDevelopmentPageInjectsReloadScriptAndDisablesAssetCache(t *testing.T) {
+	handler := newTestHandlerWithDevelopment(t, "", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/media", nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("/media status = %d, want 200", res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "/__dev/reload-version") {
+		t.Fatalf("expected development reload script in page, got %q", res.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/assets/styles.css", nil)
+	res = httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if got := res.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("development asset Cache-Control = %q, want no-store", got)
+	}
+}
+
 func newTestHandler(t *testing.T, apiKey string) *Handler {
+	return newTestHandlerWithDevelopment(t, apiKey, false)
+}
+
+func newTestHandlerWithDevelopment(t *testing.T, apiKey string, development bool) *Handler {
 	t.Helper()
 	db := newTestDatabase(t)
 	t.Cleanup(func() {
@@ -104,6 +158,7 @@ func newTestHandler(t *testing.T, apiKey string) *Handler {
 
 	cfg := DefaultConfig()
 	cfg.APIKey = apiKey
+	cfg.Development = development
 	cfg.OriginalsPath = t.TempDir()
 	cfg.ThumbnailsPath = t.TempDir()
 	cfg.DatabasePath = ""

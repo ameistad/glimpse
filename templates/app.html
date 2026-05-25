@@ -1,3 +1,45 @@
+{{define "dev_reload_script"}}
+{{if devReload}}
+<script>
+(() => {
+  const endpoint = "/__dev/reload-version";
+  let currentVersion = "";
+  let wasDisconnected = false;
+
+  async function checkForReload() {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) {
+        wasDisconnected = true;
+        return;
+      }
+
+      const data = await response.json();
+      const nextVersion = data.version || "";
+      if (!currentVersion) {
+        currentVersion = nextVersion;
+        wasDisconnected = false;
+        return;
+      }
+
+      if (wasDisconnected || (nextVersion && nextVersion !== currentVersion)) {
+        window.location.reload();
+        return;
+      }
+
+      wasDisconnected = false;
+    } catch (_) {
+      wasDisconnected = true;
+    }
+  }
+
+  window.setInterval(checkForReload, 700);
+  checkForReload();
+})();
+</script>
+{{end}}
+{{end}}
+
 {{define "login_page"}}
 <!doctype html>
 <html lang="en">
@@ -25,6 +67,7 @@
       <button type="submit">Enter the Library</button>
     </form>
   </main>
+  {{template "dev_reload_script" .}}
 </body>
 </html>
 {{end}}
@@ -113,6 +156,7 @@
   <aside id="detail-panel" class="detail-panel">
     {{template "detail_panel" .Detail}}
   </aside>
+  {{template "dev_reload_script" .}}
 </body>
 </html>
 {{end}}

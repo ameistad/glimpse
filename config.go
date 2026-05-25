@@ -16,6 +16,7 @@ type Config struct {
 	RawExtensions   []string      `json:"raw_extensions"`
 	APIKey          string        `json:"api_key"`
 	VideoExtensions []string      `json:"video_extensions"`
+	Development     bool          `json:"-"`
 }
 
 type configJSON struct {

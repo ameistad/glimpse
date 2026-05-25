@@ -117,4 +117,12 @@ go test ./...
 go build -o glimpse .
 ```
 
+Run the local development server with hot reload:
+
+```bash
+./dev.sh
+```
+
+`dev.sh` builds a development binary, restarts it when Go files, templates, assets, `go.mod`, `go.sum`, or `.dev/config.json` change, and enables a dev-only browser reload hook. The dev server disables long-lived asset caching so CSS and JavaScript changes are picked up after each reload.
+
 The web UI uses embedded local assets from `assets/` and templates from `templates/`.

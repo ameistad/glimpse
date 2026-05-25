@@ -29,15 +29,16 @@ const (
 var embeddedFiles embed.FS
 
 type Handler struct {
-	cfg       *Config
-	db        *Database
-	scanner   *Scanner
-	templates *template.Template
-	assets    http.Handler
+	cfg              *Config
+	db               *Database
+	scanner          *Scanner
+	templates        *template.Template
+	assets           http.Handler
+	devReloadVersion string
 }
 
 func NewHandler(cfg *Config, db *Database, scanner *Scanner) (*Handler, error) {
-	tmpl, err := template.New("").Funcs(templateFuncs()).ParseFS(embeddedFiles, "templates/*.html")
+	tmpl, err := template.New("").Funcs(templateFuncs(cfg.Development)).ParseFS(embeddedFiles, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
@@ -47,18 +48,29 @@ func NewHandler(cfg *Config, db *Database, scanner *Scanner) (*Handler, error) {
 		return nil, err
 	}
 
+	devReloadVersion := ""
+	if cfg.Development {
+		devReloadVersion = strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+
 	return &Handler{
-		cfg:       cfg,
-		db:        db,
-		scanner:   scanner,
-		templates: tmpl,
-		assets:    http.FileServer(http.FS(assetFS)),
+		cfg:              cfg,
+		db:               db,
+		scanner:          scanner,
+		templates:        tmpl,
+		assets:           http.FileServer(http.FS(assetFS)),
+		devReloadVersion: devReloadVersion,
 	}, nil
 }
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", cacheAssets(h.assets)))
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", cacheAssets(h.assets, h.cfg.Development)))
+	mux.HandleFunc("GET /__dev", http.NotFound)
+	mux.HandleFunc("GET /__dev/", http.NotFound)
+	if h.cfg.Development {
+		mux.HandleFunc("GET /__dev/reload-version", h.DevReloadVersion)
+	}
 
 	mux.HandleFunc("GET /", h.Home)
 	mux.HandleFunc("GET /login", h.LoginPage)
@@ -223,6 +235,16 @@ func (h *Handler) ScanStatus(w http.ResponseWriter, r *http.Request) {
 	h.render(w, http.StatusOK, "scan_status", ScanStatusData{Scanning: h.scanner.IsScanning()})
 }
 
+func (h *Handler) DevReloadVersion(w http.ResponseWriter, r *http.Request) {
+	if !h.cfg.Development {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	fmt.Fprintf(w, "{\"version\":%q}\n", h.devReloadVersion)
+}
+
 func (h *Handler) libraryData(r *http.Request, selected *MediaItem) (*LibraryData, error) {
 	filter := parseMediaFilter(r)
 	grid, err := h.gridData(filter)
@@ -354,7 +376,7 @@ func (h *Handler) authMiddleware(next http.Handler) http.Handler {
 }
 
 func (h *Handler) authExempt(path string) bool {
-	return strings.HasPrefix(path, "/assets/") || path == "/login"
+	return strings.HasPrefix(path, "/assets/") || path == "/__dev" || strings.HasPrefix(path, "/__dev/") || path == "/login"
 }
 
 func (h *Handler) authenticated(r *http.Request) bool {
@@ -436,9 +458,13 @@ func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
 
-func cacheAssets(next http.Handler) http.Handler {
+func cacheAssets(next http.Handler, development bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		if development {
+			w.Header().Set("Cache-Control", "no-store")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -566,7 +592,7 @@ func parentFolder(path string) (string, bool) {
 	return path[:idx], true
 }
 
-func templateFuncs() template.FuncMap {
+func templateFuncs(development bool) template.FuncMap {
 	return template.FuncMap{
 		"mediaURL":       mediaURL,
 		"gridURL":        gridURL,
@@ -578,6 +604,7 @@ func templateFuncs() template.FuncMap {
 		"formatMB":       formatMB,
 		"mediaTypeName":  mediaTypeName,
 		"add":            func(a, b int) int { return a + b },
+		"devReload":      func() bool { return development },
 	}
 }
 

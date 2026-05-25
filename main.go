@@ -14,12 +14,14 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.json", "Path to configuration file")
+	devMode := flag.Bool("dev", os.Getenv("GLIMPSE_DEV") == "1", "Enable development-only hot reload helpers")
 	flag.Parse()
 
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	cfg.Development = *devMode
 
 	db, err := NewDatabase(cfg.DatabasePath)
 	if err != nil {
