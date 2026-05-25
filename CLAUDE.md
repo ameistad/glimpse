@@ -21,18 +21,13 @@ Do not use plain `GOOS=linux go build`; it disables CGO and produces a broken SQ
 
 ## Deploying to Server
 
-1. Build the Linux binary.
+Run the local deploy helper:
 
-2. Copy to server:
-   ```bash
-   scp glimpse-linux andreas@storage:~/glimpse
-   ```
+```bash
+./deploy-storage.sh
+```
 
-3. SSH to server and run the deploy script:
-   ```bash
-   ssh andreas@storage
-   ./deploy-glimpse.sh
-   ```
+The script runs tests, builds the Linux binary, copies it to `andreas@storage:~/glimpse-server`, and runs the remote deploy script with a TTY for sudo.
 
 The deploy script (`/home/andreas/deploy-glimpse.sh`) handles:
 - Stopping the systemd service
@@ -46,7 +41,7 @@ Note: the deploy script requires sudo, so run it interactively.
 
 - Host: `andreas@storage`
 - Service: `glimpse.service` (systemd)
-- Binary location: `/home/glimpse/glimpse`
+- Binary location: `/home/glimpse/glimpse-server`
 - Config: `/home/glimpse/config.json`
 - Database: `/home/glimpse/glimpse.db`
 - Thumbnails: `/home/glimpse/thumbnails/`

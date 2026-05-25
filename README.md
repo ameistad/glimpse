@@ -117,6 +117,14 @@ go test ./...
 go build -o glimpse .
 ```
 
+Deploy to the `storage` server:
+
+```bash
+./deploy-storage.sh
+```
+
+The deploy script runs tests, builds the static Linux CGO binary, uploads it to `andreas@storage:~/glimpse-server`, and runs the remote `deploy-glimpse.sh` script.
+
 Run the local development server with hot reload:
 
 ```bash
