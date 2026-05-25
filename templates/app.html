@@ -223,7 +223,7 @@
   <span class="thumb-frame">
     <img src="/media/{{.ID}}/thumbnail" alt="{{.Filename}}" loading="lazy">
     {{if .IsVideo}}
-    <span class="video-badge">Play</span>
+    {{if .IsPlayableVideo}}<span class="video-badge">Play</span>{{else}}<span class="video-badge">Video</span>{{end}}
     {{if .Duration}}<span class="duration-badge">{{formatDuration .Duration}}</span>{{end}}
     {{end}}
   </span>
@@ -262,7 +262,7 @@
       {{else}}
       <div class="unsupported-video">
         <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
-        <span>Download to play this format</span>
+        <span>Download to play this video</span>
       </div>
       {{end}}
     {{else}}

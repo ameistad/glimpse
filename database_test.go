@@ -82,6 +82,58 @@ func TestListMediaItemsSearchAndTypeFilter(t *testing.T) {
 	}
 }
 
+func TestMediaItemPlayableVideoUsesBrowserSafeContainerAndCodecs(t *testing.T) {
+	tests := []struct {
+		name string
+		item MediaItem
+		want bool
+	}{
+		{
+			name: "mp4 without probed codecs falls back to playable",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".mp4"},
+			want: true,
+		},
+		{
+			name: "h264 aac mp4 is playable",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".mp4", VideoCodec: "h264", AudioCodec: "aac"},
+			want: true,
+		},
+		{
+			name: "hevc mp4 is not treated as broadly playable",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".mp4", VideoCodec: "hevc", AudioCodec: "aac"},
+			want: false,
+		},
+		{
+			name: "pcm audio blocks mp4 playback",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".mp4", VideoCodec: "h264", AudioCodec: "pcm_s16le"},
+			want: false,
+		},
+		{
+			name: "mov is not treated as browser playable",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".mov", VideoCodec: "h264", AudioCodec: "aac"},
+			want: false,
+		},
+		{
+			name: "vp9 opus webm is playable",
+			item: MediaItem{MediaType: MediaTypeVideo, Extension: ".webm", VideoCodec: "vp9", AudioCodec: "opus"},
+			want: true,
+		},
+		{
+			name: "photo is not playable video",
+			item: MediaItem{MediaType: MediaTypePhoto, Extension: ".mp4", VideoCodec: "h264", AudioCodec: "aac"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.item.IsPlayableVideo(); got != tt.want {
+				t.Fatalf("IsPlayableVideo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func newTestDatabase(t *testing.T) *Database {
 	t.Helper()
 	db, err := NewDatabase(filepath.Join(t.TempDir(), "glimpse.db"))

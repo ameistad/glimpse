@@ -101,7 +101,7 @@ This version uses a `media_items` SQLite schema. If Glimpse finds the old `photo
 
 ## Supported Formats
 
-Still images include common RAW formats plus JPEG and PNG. Videos include `.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, `.m4v`, `.wmv`, and `.flv`. Browser playback depends on the browser's native video support; unsupported video formats remain downloadable.
+Still images include common RAW formats plus JPEG and PNG. Videos include `.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, `.m4v`, `.wmv`, and `.flv`. Inline browser playback is enabled for broadly supported MP4/M4V and WebM codec combinations; other videos remain downloadable.
 
 ## Troubleshooting
 

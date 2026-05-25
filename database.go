@@ -46,12 +46,48 @@ func (m *MediaItem) IsPlayableVideo() bool {
 	if !m.IsVideo() {
 		return false
 	}
+
+	videoCodec := normalizeCodec(m.VideoCodec)
+	audioCodec := normalizeCodec(m.AudioCodec)
 	switch strings.ToLower(m.Extension) {
-	case ".mp4", ".m4v", ".mov", ".webm":
+	case ".mp4", ".m4v":
+		if videoCodec == "" && audioCodec == "" {
+			return true
+		}
+		return isH264Codec(videoCodec) && isMP4AudioCodec(audioCodec)
+	case ".webm":
+		if videoCodec == "" && audioCodec == "" {
+			return true
+		}
+		return isWebMVideoCodec(videoCodec) && isWebMAudioCodec(audioCodec)
+	default:
+		return false
+	}
+}
+
+func normalizeCodec(codec string) string {
+	return strings.ToLower(strings.TrimSpace(codec))
+}
+
+func isH264Codec(codec string) bool {
+	return codec == "h264" || strings.HasPrefix(codec, "avc1")
+}
+
+func isMP4AudioCodec(codec string) bool {
+	return codec == "" || codec == "aac" || strings.HasPrefix(codec, "mp4a") || codec == "mp3"
+}
+
+func isWebMVideoCodec(codec string) bool {
+	switch codec {
+	case "vp8", "vp9", "av1":
 		return true
 	default:
 		return false
 	}
+}
+
+func isWebMAudioCodec(codec string) bool {
+	return codec == "" || codec == "opus" || codec == "vorbis"
 }
 
 type Folder struct {

@@ -154,6 +154,42 @@ func TestMediaDetailShowsOriginalPathAndPlayableVideoSource(t *testing.T) {
 	}
 }
 
+func TestMediaDetailShowsUnsupportedVideoForBrowserHostileCodec(t *testing.T) {
+	handler := newTestHandler(t, "")
+	if err := handler.db.UpsertMediaItem(&MediaItem{
+		OriginalPath:  filepath.Join(handler.cfg.OriginalsPath, "clip.mov"),
+		ThumbnailPath: filepath.Join(handler.cfg.ThumbnailsPath, "clip.jpg"),
+		Filename:      "clip.mov",
+		Extension:     ".mov",
+		FileSize:      42,
+		ModTime:       time.Now().UTC(),
+		MediaType:     MediaTypeVideo,
+		VideoCodec:    "hevc",
+		AudioCodec:    "pcm_s16le",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	item := firstMediaItem(t, handler.db)
+
+	req := httptest.NewRequest(http.MethodGet, "/media/"+strconv.FormatInt(item.ID, 10), nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if strings.Contains(body, "<video controls") {
+		t.Fatalf("expected unsupported video to avoid inline player, got %q", body)
+	}
+	if !strings.Contains(body, "Download to play this video") {
+		t.Fatalf("expected unsupported video message, got %q", body)
+	}
+	if !strings.Contains(body, `<span class="video-badge">Video</span>`) {
+		t.Fatalf("expected unsupported video grid badge, got %q", body)
+	}
+}
+
 func TestStreamVideoSupportsInlineRangeRequests(t *testing.T) {
 	handler := newTestHandler(t, "")
 	videoPath := filepath.Join(handler.cfg.OriginalsPath, "clip.mp4")
