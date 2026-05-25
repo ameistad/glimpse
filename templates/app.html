@@ -50,7 +50,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="{{assetURL "/assets/styles.css"}}">
 </head>
 <body class="login-body">
   <main class="login-panel">
@@ -82,10 +82,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css">
-  <script defer src="/assets/htmx.min.js"></script>
-  <script defer src="/assets/app.js"></script>
-  <script defer src="/assets/alpine.min.js"></script>
+  <link rel="stylesheet" href="{{assetURL "/assets/styles.css"}}">
+  <script defer src="{{assetURL "/assets/htmx.min.js"}}"></script>
+  <script defer src="{{assetURL "/assets/app.js"}}"></script>
+  <script defer src="{{assetURL "/assets/alpine.min.js"}}"></script>
 </head>
 <body class="app-shell" x-data="library()">
   <div id="library-state" data-list-url="{{.CurrentURL}}" hidden></div>
@@ -130,13 +130,14 @@
 
   <main class="library-main">
     <header class="toolbar">
-      <form class="toolbar-search" hx-get="/media/grid" hx-target="#grid-region" hx-swap="innerHTML">
+      <form class="toolbar-search" hx-get="/media/grid" hx-target="#grid-region" hx-swap="innerHTML" @submit="syncToolbarMediaType()">
         <input type="hidden" name="folder" value="{{.Filter.Folder}}">
+        <input type="hidden" name="media_type" value="{{.Filter.MediaType}}" x-ref="mediaTypeInput" :value="activeMediaType">
         <input class="search-input" type="search" name="q" value="{{.Filter.Query}}" placeholder="Search filename or folder">
         <div class="segmented" role="group" aria-label="Media type">
-          <button type="submit" name="media_type" value="" class="{{if eq .Filter.MediaType ""}}is-active{{end}}">All</button>
-          <button type="submit" name="media_type" value="photo" class="{{if eq .Filter.MediaType "photo"}}is-active{{end}}">Photos</button>
-          <button type="submit" name="media_type" value="video" class="{{if eq .Filter.MediaType "video"}}is-active{{end}}">Videos</button>
+          <button type="submit" @click="setMediaType('')" :class="{ 'is-active': activeMediaType === '' }" aria-pressed="{{if eq .Filter.MediaType ""}}true{{else}}false{{end}}" :aria-pressed="(activeMediaType === '').toString()">All</button>
+          <button type="submit" @click="setMediaType('photo')" :class="{ 'is-active': activeMediaType === 'photo' }" aria-pressed="{{if eq .Filter.MediaType "photo"}}true{{else}}false{{end}}" :aria-pressed="(activeMediaType === 'photo').toString()">Photos</button>
+          <button type="submit" @click="setMediaType('video')" :class="{ 'is-active': activeMediaType === 'video' }" aria-pressed="{{if eq .Filter.MediaType "video"}}true{{else}}false{{end}}" :aria-pressed="(activeMediaType === 'video').toString()">Videos</button>
         </div>
       </form>
 
@@ -252,9 +253,12 @@
     <a class="detail-close" href="{{mediaURL .Filter}}" @click.prevent="clearDetail()" title="Close detail">Close</a>
   </div>
   <div class="detail-media">
-    {{if .Item.IsVideo}}
+      {{if .Item.IsVideo}}
       {{if .Item.IsPlayableVideo}}
-      <video controls preload="metadata" poster="/media/{{.Item.ID}}/thumbnail" src="/media/{{.Item.ID}}/stream"></video>
+      <video controls playsinline preload="metadata" poster="/media/{{.Item.ID}}/thumbnail">
+        <source src="/media/{{.Item.ID}}/stream" type="{{videoContentType .Item.Extension}}">
+        Download this video to play it outside the browser.
+      </video>
       {{else}}
       <div class="unsupported-video">
         <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
@@ -268,7 +272,7 @@
   <div class="detail-meta">
     <div class="detail-title">
       <h2>{{.Item.Filename}}</h2>
-      {{if .Item.Folder}}<p>{{.Item.Folder}}</p>{{end}}
+      <p class="detail-path">{{.Item.OriginalPath}}</p>
     </div>
     <a class="primary-button" href="/media/{{.Item.ID}}/original">Download Original</a>
     <dl class="metadata-grid">

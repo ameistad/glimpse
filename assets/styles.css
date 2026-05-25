@@ -433,7 +433,8 @@ a { color: inherit; text-decoration: none; }
 
 .segmented button:hover { color: var(--paper); }
 
-.segmented button.is-active {
+.segmented button.is-active,
+.segmented button[aria-pressed="true"] {
   background: var(--copper);
   color: var(--ink-0);
   font-weight: 600;
@@ -874,12 +875,13 @@ a { color: inherit; text-decoration: none; }
   overflow-wrap: anywhere;
 }
 
-.detail-title p {
+.detail-title .detail-path {
   margin: 8px 0 0;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-transform: none;
   color: var(--paper-muted);
   overflow-wrap: anywhere;
 }

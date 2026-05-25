@@ -34,23 +34,25 @@ type Handler struct {
 	scanner          *Scanner
 	templates        *template.Template
 	assets           http.Handler
+	assetVersion     string
 	devReloadVersion string
 }
 
 func NewHandler(cfg *Config, db *Database, scanner *Scanner) (*Handler, error) {
-	tmpl, err := template.New("").Funcs(templateFuncs(cfg.Development)).ParseFS(embeddedFiles, "templates/*.html")
-	if err != nil {
-		return nil, err
-	}
-
 	assetFS, err := fs.Sub(embeddedFiles, "assets")
 	if err != nil {
 		return nil, err
 	}
 
+	assetVersion := strconv.FormatInt(time.Now().UnixNano(), 36)
 	devReloadVersion := ""
 	if cfg.Development {
-		devReloadVersion = strconv.FormatInt(time.Now().UnixNano(), 36)
+		devReloadVersion = assetVersion
+	}
+
+	tmpl, err := template.New("").Funcs(templateFuncs(cfg.Development, assetVersion)).ParseFS(embeddedFiles, "templates/*.html")
+	if err != nil {
+		return nil, err
 	}
 
 	return &Handler{
@@ -59,6 +61,7 @@ func NewHandler(cfg *Config, db *Database, scanner *Scanner) (*Handler, error) {
 		scanner:          scanner,
 		templates:        tmpl,
 		assets:           http.FileServer(http.FS(assetFS)),
+		assetVersion:     assetVersion,
 		devReloadVersion: devReloadVersion,
 	}, nil
 }
@@ -329,14 +332,18 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path, filena
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Accept-Ranges", "bytes")
+	disposition := "inline"
 	if attachment {
-		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+		disposition = "attachment"
 	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
 	http.ServeContent(w, r, filename, stat.ModTime(), file)
 }
 
 func (h *Handler) render(w http.ResponseWriter, status int, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("template %s failed: %v", name, err)
@@ -592,20 +599,33 @@ func parentFolder(path string) (string, bool) {
 	return path[:idx], true
 }
 
-func templateFuncs(development bool) template.FuncMap {
+func templateFuncs(development bool, assetVersion string) template.FuncMap {
 	return template.FuncMap{
-		"mediaURL":       mediaURL,
-		"gridURL":        gridURL,
-		"detailURL":      detailURL,
-		"folderTitle":    folderTitle,
-		"formatBytes":    formatBytes,
-		"formatDate":     formatDate,
-		"formatDuration": formatDuration,
-		"formatMB":       formatMB,
-		"mediaTypeName":  mediaTypeName,
-		"add":            func(a, b int) int { return a + b },
-		"devReload":      func() bool { return development },
+		"mediaURL":         mediaURL,
+		"gridURL":          gridURL,
+		"detailURL":        detailURL,
+		"assetURL":         func(path string) string { return assetURL(path, assetVersion) },
+		"folderTitle":      folderTitle,
+		"formatBytes":      formatBytes,
+		"formatDate":       formatDate,
+		"formatDuration":   formatDuration,
+		"formatMB":         formatMB,
+		"mediaTypeName":    mediaTypeName,
+		"videoContentType": videoContentType,
+		"add":              func(a, b int) int { return a + b },
+		"devReload":        func() bool { return development },
 	}
+}
+
+func assetURL(path, version string) string {
+	if version == "" {
+		return path
+	}
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	return path + separator + "v=" + url.QueryEscape(version)
 }
 
 func mediaURL(filter MediaFilter) string {
@@ -713,7 +733,8 @@ func mediaTypeName(mediaType string) string {
 }
 
 func videoContentType(ext string) string {
-	switch strings.ToLower(ext) {
+	normalized := strings.ToLower(ext)
+	switch normalized {
 	case ".mp4", ".m4v":
 		return "video/mp4"
 	case ".mov":
@@ -729,6 +750,9 @@ func videoContentType(ext string) string {
 	case ".flv":
 		return "video/x-flv"
 	default:
+		if contentType := mime.TypeByExtension(normalized); strings.HasPrefix(contentType, "video/") {
+			return contentType
+		}
 		return "application/octet-stream"
 	}
 }

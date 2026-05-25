@@ -1,25 +1,39 @@
 document.addEventListener("alpine:init", () => {
   Alpine.data("library", () => ({
     selectedId: null,
+    activeMediaType: "",
 
     init() {
-      this.selectedId = this.idFromLocation();
+      this.syncFromLocation();
 
       window.addEventListener("popstate", () => {
-        this.selectedId = this.idFromLocation();
+        this.syncFromLocation();
       });
 
       document.addEventListener("keydown", (event) => {
         this.handleKeydown(event);
       });
 
-      document.body.addEventListener("htmx:afterSwap", () => {
-        this.selectedId = this.idFromLocation();
+      document.body.addEventListener("htmx:afterSettle", () => {
+        this.syncFromLocation();
       });
     },
 
     selectMedia(id) {
       this.selectedId = String(id);
+    },
+
+    setMediaType(mediaType) {
+      this.activeMediaType = mediaType === "photo" || mediaType === "video" ? mediaType : "";
+      if (this.$refs.mediaTypeInput) {
+        this.$refs.mediaTypeInput.value = this.activeMediaType;
+      }
+    },
+
+    syncToolbarMediaType() {
+      if (this.$refs.mediaTypeInput) {
+        this.$refs.mediaTypeInput.value = this.activeMediaType;
+      }
     },
 
     clearDetail() {
@@ -33,11 +47,12 @@ document.addEventListener("alpine:init", () => {
       const state = document.getElementById("library-state");
       const listUrl = state?.dataset?.listUrl || "/media";
       history.pushState({}, "", listUrl);
+      this.setMediaType(this.mediaTypeFromLocation());
     },
 
     handleKeydown(event) {
       const tag = document.activeElement?.tagName;
-      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(tag)) {
+      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "VIDEO", "AUDIO"].includes(tag)) {
         return;
       }
 
@@ -80,6 +95,16 @@ document.addEventListener("alpine:init", () => {
     idFromLocation() {
       const match = window.location.pathname.match(/^\/media\/(\d+)/);
       return match ? match[1] : null;
+    },
+
+    mediaTypeFromLocation() {
+      const mediaType = new URLSearchParams(window.location.search).get("media_type");
+      return mediaType === "photo" || mediaType === "video" ? mediaType : "";
+    },
+
+    syncFromLocation() {
+      this.selectedId = this.idFromLocation();
+      this.setMediaType(this.mediaTypeFromLocation());
     },
   }));
 });

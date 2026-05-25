@@ -4,8 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestOldAPIRoutesReturnNotFound(t *testing.T) {
@@ -32,6 +36,12 @@ func TestMediaPageRendersWithoutAPIKey(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), "All Media") {
 		t.Fatalf("expected rendered media page, got %q", res.Body.String())
+	}
+	if got := res.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("media page Cache-Control = %q, want no-store", got)
+	}
+	if !strings.Contains(res.Body.String(), `/assets/styles.css?v=`) || !strings.Contains(res.Body.String(), `/assets/app.js?v=`) {
+		t.Fatalf("expected cache-busted asset URLs, got %q", res.Body.String())
 	}
 }
 
@@ -92,6 +102,99 @@ func TestHTMXGridPartialPushesCanonicalMediaURL(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), "mountain.cr3") {
 		t.Fatalf("expected media card in grid partial, got %q", res.Body.String())
+	}
+}
+
+func TestMediaPageRendersReactiveMediaTypeToolbar(t *testing.T) {
+	handler := newTestHandler(t, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/media?media_type=video", nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("/media status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `name="media_type" value="video" x-ref="mediaTypeInput"`) {
+		t.Fatalf("expected media type hidden input to carry current filter, got %q", body)
+	}
+	if strings.Count(body, `name="media_type"`) != 1 {
+		t.Fatalf("expected only the hidden media_type field to submit the filter, got %q", body)
+	}
+	if !strings.Contains(body, `setMediaType('video')`) {
+		t.Fatalf("expected toolbar button to update media type client state, got %q", body)
+	}
+	if !strings.Contains(body, `>Videos</button>`) || !strings.Contains(body, `aria-pressed="true" :aria-pressed="(activeMediaType === 'video').toString()">Videos`) {
+		t.Fatalf("expected video toolbar button to render active aria state, got %q", body)
+	}
+}
+
+func TestMediaDetailShowsOriginalPathAndPlayableVideoSource(t *testing.T) {
+	handler := newTestHandler(t, "")
+	insertTestMediaItem(t, handler.db, "2024/trip", "clip.mp4", MediaTypeVideo)
+	item := firstMediaItem(t, handler.db)
+
+	req := httptest.NewRequest(http.MethodGet, "/media/"+strconv.FormatInt(item.ID, 10), nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, item.OriginalPath) {
+		t.Fatalf("expected detail page to include original path %q, got %q", item.OriginalPath, body)
+	}
+	if !strings.Contains(body, `<source src="/media/`+strconv.FormatInt(item.ID, 10)+`/stream" type="video/mp4">`) {
+		t.Fatalf("expected playable video source with content type, got %q", body)
+	}
+	if !strings.Contains(body, "playsinline") {
+		t.Fatalf("expected inline video playback attribute, got %q", body)
+	}
+}
+
+func TestStreamVideoSupportsInlineRangeRequests(t *testing.T) {
+	handler := newTestHandler(t, "")
+	videoPath := filepath.Join(handler.cfg.OriginalsPath, "clip.mp4")
+	if err := os.WriteFile(videoPath, []byte("0123456789"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.db.UpsertMediaItem(&MediaItem{
+		OriginalPath:  videoPath,
+		ThumbnailPath: filepath.Join(handler.cfg.ThumbnailsPath, "clip.jpg"),
+		Filename:      "clip.mp4",
+		Extension:     ".mp4",
+		FileSize:      10,
+		ModTime:       time.Now().UTC(),
+		MediaType:     MediaTypeVideo,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	item := firstMediaItem(t, handler.db)
+
+	req := httptest.NewRequest(http.MethodGet, "/media/"+strconv.FormatInt(item.ID, 10)+"/stream", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusPartialContent {
+		t.Fatalf("stream status = %d, want 206", res.Code)
+	}
+	if got := res.Header().Get("Content-Type"); got != "video/mp4" {
+		t.Fatalf("Content-Type = %q, want video/mp4", got)
+	}
+	if got := res.Header().Get("Accept-Ranges"); got != "bytes" {
+		t.Fatalf("Accept-Ranges = %q, want bytes", got)
+	}
+	if got := res.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "inline;") {
+		t.Fatalf("Content-Disposition = %q, want inline", got)
+	}
+	if got := res.Header().Get("Content-Range"); got != "bytes 0-3/10" {
+		t.Fatalf("Content-Range = %q, want bytes 0-3/10", got)
+	}
+	if got := res.Body.String(); got != "0123" {
+		t.Fatalf("range body = %q, want 0123", got)
 	}
 }
 
@@ -169,4 +272,16 @@ func newTestHandlerWithDevelopment(t *testing.T, apiKey string, development bool
 		t.Fatal(err)
 	}
 	return handler
+}
+
+func firstMediaItem(t *testing.T, db *Database) *MediaItem {
+	t.Helper()
+	items, err := db.ListMediaItems(MediaFilter{Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one media item")
+	}
+	return items[0]
 }
