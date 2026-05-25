@@ -2,6 +2,11 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("library", () => ({
     selectedId: null,
     activeMediaType: "",
+    fullPreview: {
+      open: false,
+      src: "",
+      alt: "",
+    },
 
     init() {
       this.syncFromLocation();
@@ -21,6 +26,18 @@ document.addEventListener("alpine:init", () => {
 
     selectMedia(id) {
       this.selectedId = String(id);
+    },
+
+    openFullPreview(src, alt) {
+      this.fullPreview = {
+        open: true,
+        src: src || "",
+        alt: alt || "Preview",
+      };
+    },
+
+    closeFullPreview() {
+      this.fullPreview.open = false;
     },
 
     setMediaType(mediaType) {
@@ -43,6 +60,7 @@ document.addEventListener("alpine:init", () => {
         detail.innerHTML = template.innerHTML;
       }
 
+      this.closeFullPreview();
       this.selectedId = null;
       const state = document.getElementById("library-state");
       const listUrl = state?.dataset?.listUrl || "/media";
@@ -51,6 +69,12 @@ document.addEventListener("alpine:init", () => {
     },
 
     handleKeydown(event) {
+      if (event.key === "Escape" && this.fullPreview.open) {
+        event.preventDefault();
+        this.closeFullPreview();
+        return;
+      }
+
       const tag = document.activeElement?.tagName;
       if (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "VIDEO", "AUDIO"].includes(tag)) {
         return;

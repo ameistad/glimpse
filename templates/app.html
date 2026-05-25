@@ -157,6 +157,20 @@
   <aside id="detail-panel" class="detail-panel">
     {{template "detail_panel" .Detail}}
   </aside>
+  <div class="full-preview"
+       x-cloak
+       x-show="fullPreview.open"
+       x-transition.opacity
+       @click.self="closeFullPreview()"
+       role="dialog"
+       aria-modal="true"
+       :aria-label="fullPreview.alt ? 'Full width preview: ' + fullPreview.alt : 'Full width preview'">
+    <div class="full-preview-bar">
+      <span x-text="fullPreview.alt"></span>
+      <button type="button" class="full-preview-close" @click="closeFullPreview()">Close</button>
+    </div>
+    <img :src="fullPreview.src" :alt="fullPreview.alt">
+  </div>
   {{template "dev_reload_script" .}}
 </body>
 </html>
@@ -250,7 +264,18 @@
 {{if .Item}}
 <div class="detail-content">
   <div class="detail-topbar">
-    <a class="detail-close" href="{{mediaURL .Filter}}" @click.prevent="clearDetail()" title="Close detail">Close</a>
+    <div class="detail-actions">
+      {{if not .Item.IsVideo}}
+      <button class="detail-full-button"
+              type="button"
+              data-full-src="/media/{{.Item.ID}}/thumbnail"
+              data-full-alt="{{.Item.Filename}}"
+              @click="openFullPreview($event.currentTarget.dataset.fullSrc, $event.currentTarget.dataset.fullAlt)">
+        Full width
+      </button>
+      {{end}}
+      <a class="detail-close" href="{{mediaURL .Filter}}" @click.prevent="clearDetail()" title="Close detail">Close</a>
+    </div>
   </div>
   <div class="detail-media">
       {{if .Item.IsVideo}}

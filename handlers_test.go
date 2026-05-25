@@ -180,6 +180,33 @@ func TestMediaDetailShowsOriginalPathAndPlayableVideoSource(t *testing.T) {
 	}
 }
 
+func TestMediaDetailShowsFullWidthPreviewForPhotos(t *testing.T) {
+	handler := newTestHandler(t, "")
+	insertTestMediaItem(t, handler.db, "2024/trip", "portrait.jpg", MediaTypePhoto)
+	item := firstMediaItem(t, handler.db)
+
+	req := httptest.NewRequest(http.MethodGet, "/media/"+strconv.FormatInt(item.ID, 10), nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `class="detail-full-button"`) {
+		t.Fatalf("expected full-width preview button, got %q", body)
+	}
+	if !strings.Contains(body, `data-full-src="/media/`+strconv.FormatInt(item.ID, 10)+`/thumbnail"`) {
+		t.Fatalf("expected full-width preview thumbnail source, got %q", body)
+	}
+	if !strings.Contains(body, `class="full-preview"`) {
+		t.Fatalf("expected full-width preview overlay, got %q", body)
+	}
+	if !strings.Contains(body, `openFullPreview($event.currentTarget.dataset.fullSrc, $event.currentTarget.dataset.fullAlt)`) {
+		t.Fatalf("expected full-width preview click handler, got %q", body)
+	}
+}
+
 func TestMediaDetailShowsUnsupportedVideoForBrowserHostileCodec(t *testing.T) {
 	handler := newTestHandler(t, "")
 	if err := handler.db.UpsertMediaItem(&MediaItem{
