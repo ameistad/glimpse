@@ -127,7 +127,11 @@ func (s *Scanner) cleanup() {
 				log.Printf("Error removing database entry for %s: %v", path.OriginalPath, err)
 				continue
 			}
-			os.Remove(path.ThumbnailPath)
+			if pathWithin(s.cfg.ThumbnailsPath, path.ThumbnailPath) {
+				os.Remove(path.ThumbnailPath)
+			} else {
+				log.Printf("Skipping thumbnail cleanup outside thumbnails path: %s", path.ThumbnailPath)
+			}
 			removed++
 		}
 	}
@@ -260,8 +264,6 @@ func (s *Scanner) generateStandardThumbnail(imgPath, thumbPath string) (width, h
 }
 
 func (s *Scanner) generateRawThumbnail(rawPath, thumbPath string) (width, height int, err error) {
-	previewPath := rawPath + ".thumb.jpg"
-
 	cmd := exec.Command("dcraw", "-e", "-c", rawPath)
 	previewData, err := cmd.Output()
 
@@ -274,13 +276,12 @@ func (s *Scanner) generateRawThumbnail(rawPath, thumbPath string) (width, height
 		}
 	}
 
-	tempFile, err := os.CreateTemp("", "glimpse-*.ppm")
+	tempFile, err := os.CreateTemp(filepath.Dir(thumbPath), "glimpse-*.ppm")
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
 	defer os.Remove(tempPath)
-	defer os.Remove(previewPath)
 
 	if _, err := tempFile.Write(previewData); err != nil {
 		tempFile.Close()
@@ -382,6 +383,22 @@ func (s *Scanner) generateVideoThumbnail(videoPath, thumbPath string) (*videoMet
 	}
 
 	return meta, nil
+}
+
+func pathWithin(basePath, targetPath string) bool {
+	base, err := filepath.Abs(basePath)
+	if err != nil {
+		return false
+	}
+	target, err := filepath.Abs(targetPath)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
 
 func (s *Scanner) probeVideo(videoPath string) *videoMetadata {
