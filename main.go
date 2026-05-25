@@ -1,0 +1,81 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+func main() {
+	configPath := flag.String("config", "config.json", "Path to configuration file")
+	flag.Parse()
+
+	cfg, err := LoadConfig(*configPath)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	db, err := NewDatabase(cfg.DatabasePath)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	scanner := NewScanner(cfg, db)
+
+	go func() {
+		log.Println("Starting initial scan...")
+		if err := scanner.Scan(); err != nil && !errors.Is(err, ErrScanAlreadyRunning) {
+			log.Printf("Scan error: %v", err)
+		}
+		log.Println("Initial scan complete")
+	}()
+
+	go func() {
+		ticker := time.NewTicker(cfg.ScanInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			log.Println("Starting periodic scan...")
+			if err := scanner.Scan(); err != nil && !errors.Is(err, ErrScanAlreadyRunning) {
+				log.Printf("Scan error: %v", err)
+			}
+			log.Println("Periodic scan complete")
+		}
+	}()
+
+	handler, err := NewHandler(cfg, db, scanner)
+	if err != nil {
+		log.Fatalf("Failed to initialize web handler: %v", err)
+	}
+
+	server := &http.Server{
+		Addr:    cfg.ListenAddr,
+		Handler: handler.Routes(),
+	}
+
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Glimpse starting on %s", cfg.ListenAddr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	<-done
+	log.Println("Shutting down...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Shutdown error: %v", err)
+	}
+}

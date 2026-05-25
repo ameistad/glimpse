@@ -7,12 +7,12 @@ import (
 )
 
 type Config struct {
-	OriginalsPath  string        `json:"originals_path"`
-	ThumbnailsPath string        `json:"thumbnails_path"`
-	DatabasePath   string        `json:"database_path"`
-	ListenAddr     string        `json:"listen_addr"`
-	ScanInterval   time.Duration `json:"scan_interval"`
-	ThumbnailSize  int           `json:"thumbnail_size"`
+	OriginalsPath   string        `json:"originals_path"`
+	ThumbnailsPath  string        `json:"thumbnails_path"`
+	DatabasePath    string        `json:"database_path"`
+	ListenAddr      string        `json:"listen_addr"`
+	ScanInterval    time.Duration `json:"scan_interval"`
+	ThumbnailSize   int           `json:"thumbnail_size"`
 	RawExtensions   []string      `json:"raw_extensions"`
 	APIKey          string        `json:"api_key"`
 	VideoExtensions []string      `json:"video_extensions"`

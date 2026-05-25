@@ -1,4 +1,4 @@
-module github.com/glimpse/server
+module github.com/ameistad/glimpse
 
 go 1.25.5
 

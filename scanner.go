@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 )
+
+var ErrScanAlreadyRunning = errors.New("scan already running")
 
 type Scanner struct {
 	cfg      *Config
@@ -34,7 +37,7 @@ func (s *Scanner) TryScan() bool {
 	go func() {
 		defer s.scanning.Store(false)
 		log.Println("Starting on-demand scan...")
-		if err := s.Scan(); err != nil {
+		if err := s.scan(); err != nil {
 			log.Printf("On-demand scan error: %v", err)
 		}
 		log.Println("On-demand scan complete")
@@ -43,18 +46,24 @@ func (s *Scanner) TryScan() bool {
 }
 
 func (s *Scanner) Scan() error {
-	// Ensure thumbnails directory exists
+	if !s.scanning.CompareAndSwap(false, true) {
+		return ErrScanAlreadyRunning
+	}
+	defer s.scanning.Store(false)
+	return s.scan()
+}
+
+func (s *Scanner) scan() error {
 	if err := os.MkdirAll(s.cfg.ThumbnailsPath, 0755); err != nil {
 		return fmt.Errorf("failed to create thumbnails directory: %w", err)
 	}
 
 	s.cleanup()
 
-	// Walk the originals directory
-	err := filepath.WalkDir(s.cfg.OriginalsPath, func(path string, d fs.DirEntry, err error) error {
+	return filepath.WalkDir(s.cfg.OriginalsPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("Error accessing %s: %v", path, err)
-			return nil // Continue despite errors
+			return nil
 		}
 
 		if d.IsDir() {
@@ -81,7 +90,7 @@ func (s *Scanner) Scan() error {
 			return nil
 		}
 
-		exists, err := s.db.PhotoExists(path, info.ModTime())
+		exists, err := s.db.MediaItemExists(path, info.ModTime())
 		if err != nil {
 			log.Printf("Error checking existence for %s: %v", path, err)
 			return nil
@@ -94,14 +103,14 @@ func (s *Scanner) Scan() error {
 			if err := s.processVideo(path, info); err != nil {
 				log.Printf("Error processing video %s: %v", path, err)
 			}
-		} else if err := s.processPhoto(path, info); err != nil {
-			log.Printf("Error processing %s: %v", path, err)
+			return nil
 		}
 
+		if err := s.processImage(path, info); err != nil {
+			log.Printf("Error processing image %s: %v", path, err)
+		}
 		return nil
 	})
-
-	return err
 }
 
 func (s *Scanner) cleanup() {
@@ -112,13 +121,13 @@ func (s *Scanner) cleanup() {
 	}
 
 	removed := 0
-	for _, p := range paths {
-		if _, err := os.Stat(p.OriginalPath); os.IsNotExist(err) {
-			if err := s.db.DeletePhoto(p.OriginalPath); err != nil {
-				log.Printf("Error removing db entry for %s: %v", p.OriginalPath, err)
+	for _, path := range paths {
+		if _, err := os.Stat(path.OriginalPath); os.IsNotExist(err) {
+			if err := s.db.DeleteMediaItem(path.OriginalPath); err != nil {
+				log.Printf("Error removing database entry for %s: %v", path.OriginalPath, err)
 				continue
 			}
-			os.Remove(p.ThumbnailPath)
+			os.Remove(path.ThumbnailPath)
 			removed++
 		}
 	}
@@ -156,8 +165,8 @@ func (s *Scanner) hasRawCompanion(imgPath string) bool {
 			continue
 		}
 		candidates := []string{base + rawExt, base + strings.ToUpper(rawExt)}
-		for _, c := range candidates {
-			if _, err := os.Stat(c); err == nil {
+		for _, candidate := range candidates {
+			if _, err := os.Stat(candidate); err == nil {
 				return true
 			}
 		}
@@ -169,66 +178,64 @@ func isStandardImage(ext string) bool {
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".tif", ".tiff":
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
-func (s *Scanner) processPhoto(path string, info fs.FileInfo) error {
-	log.Printf("Processing: %s", path)
+func (s *Scanner) processImage(path string, info fs.FileInfo) error {
+	log.Printf("Processing image: %s", path)
 
-	// Calculate thumbnail path (mirror directory structure)
 	relPath, err := filepath.Rel(s.cfg.OriginalsPath, path)
 	if err != nil {
 		return fmt.Errorf("failed to get relative path: %w", err)
 	}
 
-	// Change extension to .jpg for thumbnail
-	thumbRelPath := strings.TrimSuffix(relPath, filepath.Ext(relPath)) + ".jpg"
-	thumbPath := filepath.Join(s.cfg.ThumbnailsPath, thumbRelPath)
-
-	// Create thumbnail directory if needed
-	thumbDir := filepath.Dir(thumbPath)
-	if err := os.MkdirAll(thumbDir, 0755); err != nil {
+	thumbPath := s.thumbnailPath(relPath)
+	if err := os.MkdirAll(filepath.Dir(thumbPath), 0755); err != nil {
 		return fmt.Errorf("failed to create thumbnail directory: %w", err)
 	}
 
-	// Generate thumbnail using dcraw + ImageMagick
-	// dcraw extracts embedded JPEG preview or converts RAW
-	// convert resizes to thumbnail size
 	width, height, err := s.generateThumbnail(path, thumbPath)
 	if err != nil {
 		return fmt.Errorf("failed to generate thumbnail: %w", err)
 	}
 
-	// Calculate folder (relative to originals)
-	folder := filepath.Dir(relPath)
-	if folder == "." {
-		folder = ""
-	}
-
-	photo := &Photo{
+	item := &MediaItem{
 		OriginalPath:  path,
 		ThumbnailPath: thumbPath,
-		Folder:        folder,
+		Folder:        folderFromRelPath(relPath),
 		Filename:      info.Name(),
 		Extension:     strings.ToLower(filepath.Ext(path)),
 		FileSize:      info.Size(),
 		ModTime:       info.ModTime(),
 		Width:         width,
 		Height:        height,
-		MediaType:     "photo",
+		MediaType:     MediaTypePhoto,
 	}
 
-	return s.db.UpsertPhoto(photo)
+	return s.db.UpsertMediaItem(item)
 }
 
-func (s *Scanner) generateThumbnail(rawPath, thumbPath string) (width, height int, err error) {
-	ext := strings.ToLower(filepath.Ext(rawPath))
+func (s *Scanner) thumbnailPath(relPath string) string {
+	thumbRelPath := strings.TrimSuffix(relPath, filepath.Ext(relPath)) + ".jpg"
+	return filepath.Join(s.cfg.ThumbnailsPath, thumbRelPath)
+}
 
-	if isStandardImage(ext) {
-		return s.generateStandardThumbnail(rawPath, thumbPath)
+func folderFromRelPath(relPath string) string {
+	folder := filepath.Dir(relPath)
+	if folder == "." {
+		return ""
 	}
-	return s.generateRawThumbnail(rawPath, thumbPath)
+	return filepath.ToSlash(folder)
+}
+
+func (s *Scanner) generateThumbnail(mediaPath, thumbPath string) (width, height int, err error) {
+	ext := strings.ToLower(filepath.Ext(mediaPath))
+	if isStandardImage(ext) {
+		return s.generateStandardThumbnail(mediaPath, thumbPath)
+	}
+	return s.generateRawThumbnail(mediaPath, thumbPath)
 }
 
 func (s *Scanner) generateStandardThumbnail(imgPath, thumbPath string) (width, height int, err error) {
@@ -323,9 +330,7 @@ func (s *Scanner) processVideo(path string, info fs.FileInfo) error {
 		return fmt.Errorf("failed to get relative path: %w", err)
 	}
 
-	thumbRelPath := strings.TrimSuffix(relPath, filepath.Ext(relPath)) + ".jpg"
-	thumbPath := filepath.Join(s.cfg.ThumbnailsPath, thumbRelPath)
-
+	thumbPath := s.thumbnailPath(relPath)
 	if err := os.MkdirAll(filepath.Dir(thumbPath), 0755); err != nil {
 		return fmt.Errorf("failed to create thumbnail directory: %w", err)
 	}
@@ -335,29 +340,24 @@ func (s *Scanner) processVideo(path string, info fs.FileInfo) error {
 		return fmt.Errorf("failed to generate video thumbnail: %w", err)
 	}
 
-	folder := filepath.Dir(relPath)
-	if folder == "." {
-		folder = ""
-	}
-
-	photo := &Photo{
+	item := &MediaItem{
 		OriginalPath:  path,
 		ThumbnailPath: thumbPath,
-		Folder:        folder,
+		Folder:        folderFromRelPath(relPath),
 		Filename:      info.Name(),
 		Extension:     strings.ToLower(filepath.Ext(path)),
 		FileSize:      info.Size(),
 		ModTime:       info.ModTime(),
 		Width:         meta.Width,
 		Height:        meta.Height,
-		MediaType:     "video",
+		MediaType:     MediaTypeVideo,
 		Duration:      meta.Duration,
 		VideoCodec:    meta.VideoCodec,
 		AudioCodec:    meta.AudioCodec,
 		Framerate:     meta.Framerate,
 	}
 
-	return s.db.UpsertPhoto(photo)
+	return s.db.UpsertMediaItem(item)
 }
 
 func (s *Scanner) generateVideoThumbnail(videoPath, thumbPath string) (*videoMetadata, error) {
@@ -369,7 +369,6 @@ func (s *Scanner) generateVideoThumbnail(videoPath, thumbPath string) (*videoMet
 	}
 
 	size := fmt.Sprintf("%d", s.cfg.ThumbnailSize)
-
 	cmd := exec.Command("ffmpeg",
 		"-ss", seekTime,
 		"-i", videoPath,

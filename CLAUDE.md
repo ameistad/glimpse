@@ -2,29 +2,30 @@
 
 ## Project Structure
 
-- `Glimpse/` - macOS SwiftUI app
-- `server/` - Go backend server
+- Root Go module: `github.com/ameistad/glimpse`
+- `assets/` - embedded CSS and local JS dependencies
+- `templates/` - Go `html/template` files
+- `docs/adr/` - architecture decision records
 
-## Building the Server for Linux
+## Building for Linux
 
-The server uses `go-sqlite3` which requires CGO. Cross-compiling from macOS requires `musl-cross`:
+The app uses `go-sqlite3`, so CGO must be enabled. Cross-compiling from macOS requires `musl-cross`:
 
 ```bash
-cd server
 CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 \
   go build -ldflags="-linkmode external -extldflags '-static'" \
-  -o glimpse-server-linux .
+  -o glimpse-linux .
 ```
 
-Do NOT use plain `GOOS=linux go build` as it disables CGO and produces a broken binary.
+Do not use plain `GOOS=linux go build`; it disables CGO and produces a broken SQLite build.
 
 ## Deploying to Server
 
-1. Build the Linux binary (see above)
+1. Build the Linux binary.
 
 2. Copy to server:
    ```bash
-   scp server/glimpse-server-linux andreas@storage:~/glimpse-server
+   scp glimpse-linux andreas@storage:~/glimpse
    ```
 
 3. SSH to server and run the deploy script:
@@ -36,25 +37,26 @@ Do NOT use plain `GOOS=linux go build` as it disables CGO and produces a broken 
 The deploy script (`/home/andreas/deploy-glimpse.sh`) handles:
 - Stopping the systemd service
 - Copying the binary to `/home/glimpse/`
-- Resetting the database (removes glimpse.db for fresh scan)
+- Resetting the database when needed
 - Restarting the service
 
-Note: The deploy script requires sudo, so run it interactively.
+Note: the deploy script requires sudo, so run it interactively.
 
 ## Server Details
 
 - Host: `andreas@storage`
 - Service: `glimpse.service` (systemd)
-- Binary location: `/home/glimpse/glimpse-server`
+- Binary location: `/home/glimpse/glimpse`
 - Config: `/home/glimpse/config.json`
 - Database: `/home/glimpse/glimpse.db`
 - Thumbnails: `/home/glimpse/thumbnails/`
 - Photos source: `/tank/andreas/Storage/Photos`
 
-### Manual service control:
+### Manual service control
+
 ```bash
 sudo systemctl status glimpse
 sudo systemctl stop glimpse
 sudo systemctl start glimpse
-sudo journalctl -u glimpse -f  # follow logs
+sudo journalctl -u glimpse -f
 ```

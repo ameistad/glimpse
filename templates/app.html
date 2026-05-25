@@ -1,0 +1,259 @@
+{{define "login_page"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Glimpse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,200..700,30..100;1,9..144,200..700,30..100&family=Hanken+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="login-body">
+  <main class="login-panel">
+    <div class="brand-mark">G</div>
+    <h1>Glimpse</h1>
+    <p>The Personal Media Library</p>
+    {{if .Error}}<div class="form-error">{{.Error}}</div>{{end}}
+    <form method="post" action="/login" class="login-form">
+      <input type="hidden" name="next" value="{{.Next}}">
+      <label>
+        <span>Server API Key</span>
+        <input name="api_key" type="password" autofocus autocomplete="current-password" placeholder="••••••••••••••">
+      </label>
+      <button type="submit">Enter the Library</button>
+    </form>
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "library_page"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glimpse · Media Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,200..700,30..100;1,9..144,200..700,30..100&family=Hanken+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="/assets/htmx.min.js"></script>
+  <script defer src="/assets/app.js"></script>
+  <script defer src="/assets/alpine.min.js"></script>
+</head>
+<body class="app-shell" x-data="library()">
+  <div id="library-state" data-list-url="{{.CurrentURL}}" hidden></div>
+  <template id="empty-detail-template">{{template "detail_empty" .Filter}}</template>
+
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="brand-lockup">
+        <div class="brand-mark">G</div>
+        <div>
+          <strong>Glimpse</strong>
+          <span>Media Library</span>
+        </div>
+      </div>
+      {{if .AuthEnabled}}
+      <form method="post" action="/logout">
+        <button class="icon-button" type="submit" title="Sign out">Sign out</button>
+      </form>
+      {{end}}
+    </div>
+
+    <nav class="folder-nav" aria-label="Folders">
+      <a class="folder-link {{if eq .Filter.Folder ""}}is-active{{end}}" href="{{.AllURL}}" hx-get="{{.AllGridURL}}" hx-target="#grid-region" hx-swap="innerHTML">
+        <span class="folder-name">All Media</span>
+      </a>
+      {{if .FolderTree}}
+      <div class="folder-tree">
+        {{range .FolderTree}}{{template "folder_node" .}}{{end}}
+      </div>
+      {{end}}
+    </nav>
+
+    {{if .Stats}}
+    <dl class="stats">
+      <div><dt>Photos</dt><dd>{{.Stats.TotalPhotos}}</dd></div>
+      <div><dt>Videos</dt><dd>{{.Stats.TotalVideos}}</dd></div>
+      <div><dt>Folders</dt><dd>{{.Stats.TotalFolders}}</dd></div>
+      <div><dt>Total size</dt><dd>{{formatMB .Stats.TotalOriginalMB}}</dd></div>
+    </dl>
+    {{end}}
+  </aside>
+
+  <main class="library-main">
+    <header class="toolbar">
+      <form class="toolbar-search" hx-get="/media/grid" hx-target="#grid-region" hx-swap="innerHTML">
+        <input type="hidden" name="folder" value="{{.Filter.Folder}}">
+        <input class="search-input" type="search" name="q" value="{{.Filter.Query}}" placeholder="Search filename or folder">
+        <div class="segmented" role="group" aria-label="Media type">
+          <button type="submit" name="media_type" value="" class="{{if eq .Filter.MediaType ""}}is-active{{end}}">All</button>
+          <button type="submit" name="media_type" value="photo" class="{{if eq .Filter.MediaType "photo"}}is-active{{end}}">Photos</button>
+          <button type="submit" name="media_type" value="video" class="{{if eq .Filter.MediaType "video"}}is-active{{end}}">Videos</button>
+        </div>
+      </form>
+
+      <div class="scan-control">
+        <form hx-post="/scan" hx-target="#scan-status" hx-swap="outerHTML">
+          <button type="submit" class="secondary-button">Rescan</button>
+        </form>
+        {{template "scan_status" .Scan}}
+      </div>
+    </header>
+
+    <section id="grid-region" class="grid-region">
+      {{template "grid_region" .Grid}}
+    </section>
+  </main>
+
+  <aside id="detail-panel" class="detail-panel">
+    {{template "detail_panel" .Detail}}
+  </aside>
+</body>
+</html>
+{{end}}
+
+{{define "folder_node"}}
+<div class="folder-node" x-data="{ open: {{if .Open}}true{{else}}false{{end}} }">
+  <div class="folder-row">
+    {{if .Children}}
+    <button class="tree-toggle" type="button" @click="open = !open" :aria-expanded="open.toString()">
+      <span x-show="!open">+</span><span x-show="open">-</span>
+    </button>
+    {{else}}
+    <span class="tree-spacer"></span>
+    {{end}}
+    <a class="folder-link {{if .Active}}is-active{{end}}" href="{{.URL}}" hx-get="{{.GridURL}}" hx-target="#grid-region" hx-swap="innerHTML">
+      <span class="folder-name">{{.Name}}</span>
+      <span class="folder-count">{{.Count}}</span>
+    </a>
+  </div>
+  {{if .Children}}
+  <div class="folder-children" x-show="open">
+    {{range .Children}}{{template "folder_node" .}}{{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+{{define "grid_region"}}
+{{if .IncludeDetailReset}}
+<div id="library-state" data-list-url="{{mediaURL .Filter}}" hx-swap-oob="true" hidden></div>
+{{end}}
+<div class="grid-head">
+  <div>
+    <h1>{{.FolderTitle}}</h1>
+    <p>{{.Count}} media items{{if .Filter.Query}} matching "{{.Filter.Query}}"{{end}}</p>
+  </div>
+</div>
+
+<div id="media-grid" class="media-grid">
+  {{template "media_cards" .}}
+</div>
+{{if .IncludeDetailReset}}
+<aside id="detail-panel" hx-swap-oob="innerHTML">{{template "detail_empty" .Filter}}</aside>
+{{end}}
+{{end}}
+
+{{define "media_cards_append"}}
+{{template "media_cards" .}}
+{{end}}
+
+{{define "media_cards"}}
+{{range .Items}}
+<a class="media-card"
+   href="{{detailURL .ID $.Filter}}"
+   hx-get="{{detailURL .ID $.Filter}}"
+   hx-target="#detail-panel"
+   hx-swap="innerHTML"
+   hx-push-url="true"
+   data-media-card
+   data-media-id="{{.ID}}"
+   @click="selectMedia('{{.ID}}')"
+   :class="{ 'is-selected': selectedId === '{{.ID}}' }">
+  <span class="thumb-frame">
+    <img src="/media/{{.ID}}/thumbnail" alt="{{.Filename}}" loading="lazy">
+    {{if .IsVideo}}
+    <span class="video-badge">Play</span>
+    {{if .Duration}}<span class="duration-badge">{{formatDuration .Duration}}</span>{{end}}
+    {{end}}
+  </span>
+  <span class="media-name">{{.Filename}}</span>
+  <span class="media-meta">{{mediaTypeName .MediaType}} · {{formatBytes .FileSize}}</span>
+</a>
+{{else}}
+<div class="empty-grid">
+  <h2>No media items found</h2>
+  <p>Try a different folder, search, or media type filter.</p>
+</div>
+{{end}}
+{{if .HasMore}}
+<div class="load-sentinel"
+     hx-get="{{gridURL .Filter .NextOffset true}}"
+     hx-trigger="revealed"
+     hx-swap="outerHTML">
+  Loading more...
+</div>
+{{end}}
+{{end}}
+
+{{define "detail_panel"}}
+{{if .Item}}
+<div class="detail-content">
+  <div class="detail-topbar">
+    <a class="detail-close" href="{{mediaURL .Filter}}" @click.prevent="clearDetail()" title="Close detail">Close</a>
+  </div>
+  <div class="detail-media">
+    {{if .Item.IsVideo}}
+      {{if .Item.IsPlayableVideo}}
+      <video controls preload="metadata" poster="/media/{{.Item.ID}}/thumbnail" src="/media/{{.Item.ID}}/stream"></video>
+      {{else}}
+      <div class="unsupported-video">
+        <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
+        <span>Download to play this format</span>
+      </div>
+      {{end}}
+    {{else}}
+      <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
+    {{end}}
+  </div>
+  <div class="detail-meta">
+    <div class="detail-title">
+      <h2>{{.Item.Filename}}</h2>
+      {{if .Item.Folder}}<p>{{.Item.Folder}}</p>{{end}}
+    </div>
+    <a class="primary-button" href="/media/{{.Item.ID}}/original">Download Original</a>
+    <dl class="metadata-grid">
+      <div><dt>Type</dt><dd>{{mediaTypeName .Item.MediaType}}</dd></div>
+      <div><dt>Format</dt><dd>{{.Item.Extension}}</dd></div>
+      <div><dt>Size</dt><dd>{{formatBytes .Item.FileSize}}</dd></div>
+      {{if .Item.Width}}<div><dt>Dimensions</dt><dd>{{.Item.Width}} x {{.Item.Height}}</dd></div>{{end}}
+      {{if .Item.Duration}}<div><dt>Duration</dt><dd>{{formatDuration .Item.Duration}}</dd></div>{{end}}
+      {{if .Item.VideoCodec}}<div><dt>Video codec</dt><dd>{{.Item.VideoCodec}}</dd></div>{{end}}
+      {{if .Item.AudioCodec}}<div><dt>Audio codec</dt><dd>{{.Item.AudioCodec}}</dd></div>{{end}}
+      {{if .Item.Framerate}}<div><dt>Framerate</dt><dd>{{printf "%.1f fps" .Item.Framerate}}</dd></div>{{end}}
+      <div><dt>Modified</dt><dd>{{formatDate .Item.ModTime}}</dd></div>
+    </dl>
+  </div>
+</div>
+{{else}}
+{{template "detail_empty" .Filter}}
+{{end}}
+{{end}}
+
+{{define "detail_empty"}}
+<div class="empty-detail">
+  <h2>Select a media item</h2>
+  <p>Use the grid, folder tree, search, or arrow keys to inspect the library.</p>
+</div>
+{{end}}
+
+{{define "scan_status"}}
+<div id="scan-status" class="scan-status {{if .Scanning}}is-running{{end}}" hx-get="/scan/status" hx-trigger="every 5s" hx-swap="outerHTML">
+  {{if .Scanning}}Scanning{{else}}Idle{{end}}
+</div>
+{{end}}

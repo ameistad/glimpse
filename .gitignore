@@ -1,7 +1,6 @@
 # Go build output
-server/glimpse-server
-server/glimpse-server-linux
-server/server
+glimpse
+glimpse-linux
 *.exe
 *.test
 *.out
@@ -9,19 +8,8 @@ server/server
 # Environment
 .env
 
-# Swift
-Glimpse/.build/
-Glimpse/.swiftpm/
-*.xcodeproj
-*.xcworkspace
-xcuserdata/
-DerivedData/
-*.app
-*.dmg
-*.iconset
-
 # Config (may contain sensitive paths)
-server/config.json
+config.json
 
 # Database
 *.db

@@ -1,84 +1,44 @@
 # Glimpse
 
-A fast RAW photo browser for your homelab. Glimpse generates lightweight JPEG thumbnails from your RAW photo library and serves them via a native macOS app, making it easy to browse large collections without the slowness of Samba file transfers.
+A fast browser-based media library for a homelab photo archive. Glimpse scans originals, generates lightweight JPEG thumbnails, stores metadata in SQLite, and serves a Go + HTMX web UI for browsing, previewing, streaming supported videos, and downloading originals.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                 Debian Server (ZFS)                     │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Go Service (glimpse-server)                     │   │
-│  │  • Periodic directory traversal                  │   │
-│  │  • RAW → JPEG thumbnail generation               │   │
-│  │  • SQLite metadata storage                       │   │
-│  │  • REST API for browsing + downloads             │   │
-│  └─────────────────────────────────────────────────┘   │
-│              │                                          │
-│  /pool/photos/originals/   ←  Your RAW files           │
-│  /pool/thumbnails/         ←  Generated JPEGs          │
-└─────────────────────────────────────────────────────────┘
-                          │ HTTP API
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│              macOS App (Glimpse.app)                    │
-│  • Native SwiftUI interface                             │
-│  • Grid view with smooth scrolling                      │
-│  • Download RAW files on demand                         │
-└─────────────────────────────────────────────────────────┘
+Debian/ZFS host
+├── Go web app (`glimpse`)
+│   ├── periodic media scan
+│   ├── thumbnail generation
+│   ├── SQLite metadata store
+│   └── HTML/HTMX browser UI
+├── originals_path      source media archive
+└── thumbnails_path     generated JPEG thumbnails
 ```
 
-## Server Setup (Debian 12)
+The browser UI is the supported client. The old Swift macOS client and JSON `/api/*` routes have been removed.
 
-### Prerequisites
+## Setup
 
-Install required packages:
+Install required system packages:
 
 ```bash
 sudo apt update
-sudo apt install dcraw imagemagick
+sudo apt install dcraw imagemagick ffmpeg
 ```
 
-### ZFS Dataset Setup (Recommended)
-
-Create a separate dataset for thumbnails:
+Build the app:
 
 ```bash
-# Create thumbnails dataset
-sudo zfs create pool/thumbnails
-
-# Optional: Set compression (thumbnails compress well)
-sudo zfs set compression=lz4 pool/thumbnails
-
-# Create the directory structure
-sudo mkdir -p /pool/thumbnails
-sudo chown $USER:$USER /pool/thumbnails
+go build -o glimpse .
 ```
 
-### Building the Server
-
-On your Debian server (requires Go 1.21+):
-
-```bash
-# Clone or copy the server directory to your server
-cd glimpse/server
-
-# Build
-go build -o glimpse-server .
-
-# Or for a static binary
-CGO_ENABLED=1 go build -ldflags="-s -w" -o glimpse-server .
-```
-
-### Configuration
-
-Create a configuration file:
+Create a config file:
 
 ```bash
 cp config.example.json config.json
 ```
 
-Edit `config.json` to match your setup:
+Edit `config.json`:
 
 ```json
 {
@@ -86,46 +46,48 @@ Edit `config.json` to match your setup:
   "thumbnails_path": "/pool/thumbnails",
   "database_path": "/pool/thumbnails/glimpse.db",
   "listen_addr": ":8080",
+  "api_key": "",
   "scan_interval_seconds": 3600,
-  "thumbnail_size": 800,
-  "raw_extensions": [".cr2", ".cr3", ".nef", ".arw", ".dng", ".raf"]
+  "thumbnail_size": 800
 }
 ```
 
-| Option | Description |
-|--------|-------------|
-| `originals_path` | Path to your RAW photo directory |
-| `thumbnails_path` | Where to store generated thumbnails (use separate ZFS dataset) |
-| `database_path` | SQLite database location |
-| `listen_addr` | HTTP server address (use `0.0.0.0:8080` to listen on all interfaces) |
-| `scan_interval_seconds` | How often to scan for new photos (3600 = 1 hour) |
-| `thumbnail_size` | Maximum dimension for thumbnails in pixels |
-| `raw_extensions` | List of RAW file extensions to process |
-
-### Running the Server
+Run it:
 
 ```bash
-# Run directly
-./glimpse-server -config config.json
-
-# Or run in background with nohup
-nohup ./glimpse-server -config config.json > glimpse.log 2>&1 &
+./glimpse -config config.json
 ```
 
-### Systemd Service (Recommended)
+Open `http://your-server:8080/media`. If `api_key` is set, the web UI shows a login form and stores an HttpOnly browser session cookie after a successful login.
 
-Create `/etc/systemd/system/glimpse.service`:
+## Configuration
+
+| Option | Description |
+|--------|-------------|
+| `originals_path` | Path to the original media archive |
+| `thumbnails_path` | Where generated thumbnails are stored |
+| `database_path` | SQLite database path |
+| `listen_addr` | HTTP listen address; use `0.0.0.0:8080` for LAN access |
+| `api_key` | Optional browser login key |
+| `scan_interval_seconds` | How often to scan for new or changed media |
+| `thumbnail_size` | Maximum thumbnail dimension in pixels |
+| `raw_extensions` | Still-image extensions to process |
+| `video_extensions` | Video extensions to process |
+
+## Systemd
+
+Example `/etc/systemd/system/glimpse.service`:
 
 ```ini
 [Unit]
-Description=Glimpse Photo Server
+Description=Glimpse Media Library
 After=network.target zfs-mount.service
 
 [Service]
 Type=simple
-User=your-username
-WorkingDirectory=/path/to/glimpse/server
-ExecStart=/path/to/glimpse/server/glimpse-server -config /path/to/config.json
+User=glimpse
+WorkingDirectory=/home/glimpse
+ExecStart=/home/glimpse/glimpse -config /home/glimpse/config.json
 Restart=always
 RestartSec=5
 
@@ -133,111 +95,26 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Enable and start:
+## Database Reset
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable glimpse
-sudo systemctl start glimpse
-sudo systemctl status glimpse
-```
+This version uses a `media_items` SQLite schema. If Glimpse finds the old `photos` schema, startup fails with an instruction to delete the database and rescan. This is intentional; existing deployments already treat the database as rebuildable from originals and thumbnails.
 
-### Firewall
+## Supported Formats
 
-If using ufw, allow access:
-
-```bash
-sudo ufw allow 8080/tcp
-```
-
-## macOS App Setup
-
-### Building the App
-
-On your Mac (requires Xcode Command Line Tools):
-
-```bash
-cd glimpse/Glimpse
-
-# Build debug version
-swift build
-
-# Run directly
-swift run
-
-# Or build release version
-swift build -c release
-```
-
-The built app will be in `.build/release/Glimpse` or `.build/debug/Glimpse`.
-
-### Creating an App Bundle (Optional)
-
-For a proper .app bundle, create an Xcode project:
-
-1. Open Xcode → File → New → Project
-2. Choose "App" under macOS
-3. Name it "Glimpse", select SwiftUI
-4. Delete the generated files and add the files from `Sources/`
-5. Build and archive for distribution
-
-### Configuration
-
-1. Launch the app
-2. Open Settings (Cmd+,)
-3. Enter your server URL (e.g., `http://192.168.1.100:8080`)
-4. Set your preferred download directory
-5. Click "Test Connection" to verify
-
-## API Reference
-
-The server exposes a REST API:
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/photos` | List photos (supports `folder`, `limit`, `offset` params) |
-| `GET /api/photos/{id}` | Get photo metadata |
-| `GET /api/photos/{id}/thumbnail` | Get thumbnail JPEG |
-| `GET /api/photos/{id}/original` | Download original RAW file |
-| `GET /api/folders` | List all folders with photo counts |
-| `GET /api/stats` | Get library statistics |
-
-## Supported RAW Formats
-
-- Canon: `.cr2`, `.cr3`
-- Nikon: `.nef`, `.nrw`
-- Sony: `.arw`, `.srf`, `.sr2`
-- Olympus: `.orf`
-- Pentax: `.pef`
-- Fuji: `.raf`
-- Panasonic: `.rw2`
-- Adobe: `.dng`
-- Leica: `.rwl`
-- Hasselblad: `.3fr`, `.fff`
-- Phase One: `.iiq`
+Still images include common RAW formats plus JPEG and PNG. Videos include `.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, `.m4v`, `.wmv`, and `.flv`. Browser playback depends on the browser's native video support; unsupported video formats remain downloadable.
 
 ## Troubleshooting
 
-### Thumbnails not generating
+- Thumbnail generation needs `dcraw` and ImageMagick `convert`.
+- Video thumbnails and metadata need `ffmpeg` and `ffprobe`.
+- The first scan can take a long time; later scans skip unchanged media.
+- If the browser redirects to login unexpectedly, confirm `api_key` in `config.json` and clear the `glimpse_session` cookie.
 
-1. Check dcraw is installed: `dcraw -v`
-2. Check ImageMagick is installed: `convert -version`
-3. Check server logs: `journalctl -u glimpse -f`
-4. Verify file permissions on originals and thumbnails directories
+## Development
 
-### App can't connect to server
+```bash
+go test ./...
+go build -o glimpse .
+```
 
-1. Verify server is running: `curl http://your-server:8080/api/stats`
-2. Check firewall settings
-3. Ensure server is listening on the correct interface (`0.0.0.0` for all)
-
-### Slow thumbnail generation
-
-The first scan takes time as it processes all RAW files. Subsequent scans only process new/modified files. Consider:
-
-- Using `-h` flag in dcraw for half-size extraction (already enabled)
-- Processing during off-hours via the scan interval setting
-
-## License
-
-MIT
+The web UI uses embedded local assets from `assets/` and templates from `templates/`.
