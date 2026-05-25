@@ -123,7 +123,13 @@ Deploy to the `storage` server:
 ./deploy-storage.sh
 ```
 
-The deploy script runs tests, builds the static Linux CGO binary, uploads it to `andreas@storage:~/glimpse-server`, and runs the remote `deploy-glimpse.sh` script.
+The deploy script runs tests, builds the static Linux CGO binary, uploads it to `andreas@storage:~/glimpse-server`, and runs the remote `deploy-glimpse.sh` script. It preserves the existing SQLite database by default, so startup scans skip unchanged media.
+
+To force a database rebuild and full rescan:
+
+```bash
+./deploy-storage.sh --full-rescan
+```
 
 Run the local development server with hot reload:
 

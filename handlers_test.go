@@ -196,6 +196,9 @@ func TestMediaDetailShowsFullWidthPreviewForPhotos(t *testing.T) {
 	if !strings.Contains(body, `class="detail-full-button"`) {
 		t.Fatalf("expected full-width preview button, got %q", body)
 	}
+	if !strings.Contains(body, `class="detail-image-trigger"`) {
+		t.Fatalf("expected detail image to open full-width preview, got %q", body)
+	}
 	if !strings.Contains(body, `data-full-src="/media/`+strconv.FormatInt(item.ID, 10)+`/thumbnail"`) {
 		t.Fatalf("expected full-width preview thumbnail source, got %q", body)
 	}

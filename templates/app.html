@@ -291,7 +291,14 @@
       </div>
       {{end}}
     {{else}}
-      <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
+      <button class="detail-image-trigger"
+              type="button"
+              data-full-src="/media/{{.Item.ID}}/thumbnail"
+              data-full-alt="{{.Item.Filename}}"
+              aria-label="Open {{.Item.Filename}} full width"
+              @click="openFullPreview($event.currentTarget.dataset.fullSrc, $event.currentTarget.dataset.fullAlt)">
+        <img src="/media/{{.Item.ID}}/thumbnail" alt="{{.Item.Filename}}">
+      </button>
     {{end}}
   </div>
   <div class="detail-meta">

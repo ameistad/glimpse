@@ -8,6 +8,37 @@ remote_binary="${GLIMPSE_REMOTE_BINARY:-~/glimpse-server}"
 remote_deploy_cmd="${GLIMPSE_REMOTE_DEPLOY_CMD:-./deploy-glimpse.sh}"
 binary="${GLIMPSE_DEPLOY_BINARY:-glimpse-linux}"
 cc="${CC:-x86_64-linux-musl-gcc}"
+full_rescan=false
+
+usage() {
+  cat <<EOF
+Usage: $0 [--full-rescan|--reset-db]
+
+Deploys the binary and preserves the existing media database by default.
+
+Options:
+  --full-rescan, --reset-db  Delete the remote database before restart so Glimpse rebuilds it.
+  -h, --help                 Show this help.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --full-rescan|--reset-db)
+      full_rescan=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
 
 if ! command -v "$cc" >/dev/null 2>&1; then
   echo "Missing compiler: $cc" >&2
@@ -26,5 +57,19 @@ CGO_ENABLED=1 CC="$cc" GOOS=linux GOARCH=amd64 \
 echo "[deploy] uploading $binary to $host:$remote_binary"
 scp "$binary" "$host:$remote_binary"
 
-echo "[deploy] running $remote_deploy_cmd on $host"
-ssh -t "$host" "$remote_deploy_cmd"
+remote_args=()
+if [[ "$full_rescan" == true ]]; then
+  echo "[deploy] full rescan requested; remote deploy will delete the database"
+  remote_args+=(--reset-db)
+else
+  echo "[deploy] preserving database; startup scan will skip unchanged media"
+fi
+
+remote_cmd="$remote_deploy_cmd"
+if ((${#remote_args[@]})); then
+  printf -v quoted_args " %q" "${remote_args[@]}"
+  remote_cmd+="$quoted_args"
+fi
+
+echo "[deploy] running $remote_cmd on $host"
+ssh -t "$host" "$remote_cmd"

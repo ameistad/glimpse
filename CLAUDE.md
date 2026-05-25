@@ -29,10 +29,16 @@ Run the local deploy helper:
 
 The script runs tests, builds the Linux binary, copies it to `andreas@storage:~/glimpse-server`, and runs the remote deploy script with a TTY for sudo.
 
+Normal deploys preserve `/home/glimpse/glimpse.db`, so the startup scan is incremental. To delete the database and force a full rescan, run:
+
+```bash
+./deploy-storage.sh --full-rescan
+```
+
 The deploy script (`/home/andreas/deploy-glimpse.sh`) handles:
 - Stopping the systemd service
 - Copying the binary to `/home/glimpse/`
-- Resetting the database when needed
+- Resetting the database only when `--full-rescan`/`--reset-db` is passed
 - Restarting the service
 
 Note: the deploy script requires sudo, so run it interactively.
