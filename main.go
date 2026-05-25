@@ -5,9 +5,11 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -65,7 +67,7 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Glimpse starting on %s", cfg.ListenAddr)
+		log.Printf("Glimpse starting on %s", listenURL(cfg.ListenAddr))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
@@ -80,4 +82,23 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("Shutdown error: %v", err)
 	}
+}
+
+func listenURL(addr string) string {
+	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
+		return addr
+	}
+
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		if strings.HasPrefix(addr, ":") {
+			return "http://localhost" + addr
+		}
+		return "http://" + addr
+	}
+
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
