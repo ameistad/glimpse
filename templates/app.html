@@ -108,7 +108,7 @@
     </div>
 
     <nav class="folder-nav" aria-label="Folders">
-      <a class="folder-link {{if eq .Filter.Folder ""}}is-active{{end}}" href="{{.AllURL}}" hx-get="{{.AllGridURL}}" hx-target="#grid-region" hx-swap="innerHTML">
+      <a class="folder-link {{if eq .Filter.Folder ""}}is-active{{end}}" href="{{.AllURL}}" hx-get="{{.AllGridURL}}" hx-target="#grid-region" hx-swap="innerHTML" data-folder-link data-folder=""{{if eq .Filter.Folder ""}} aria-current="page"{{end}}>
         <span class="folder-name">All Media</span>
       </a>
       {{if .FolderTree}}
@@ -131,7 +131,7 @@
   <main class="library-main">
     <header class="toolbar">
       <form class="toolbar-search" hx-get="/media/grid" hx-target="#grid-region" hx-swap="innerHTML" @submit="syncToolbarMediaType()">
-        <input type="hidden" name="folder" value="{{.Filter.Folder}}">
+        <input type="hidden" name="folder" value="{{.Filter.Folder}}" x-ref="folderInput" :value="activeFolder">
         <input type="hidden" name="media_type" value="{{.Filter.MediaType}}" x-ref="mediaTypeInput" :value="activeMediaType">
         <input class="search-input" type="search" name="q" value="{{.Filter.Query}}" placeholder="Search filename or folder">
         <div class="segmented" role="group" aria-label="Media type">
@@ -186,7 +186,7 @@
     {{else}}
     <span class="tree-spacer"></span>
     {{end}}
-    <a class="folder-link {{if .Active}}is-active{{end}}" href="{{.URL}}" hx-get="{{.GridURL}}" hx-target="#grid-region" hx-swap="innerHTML">
+    <a class="folder-link {{if .Active}}is-active{{end}}" href="{{.URL}}" hx-get="{{.GridURL}}" hx-target="#grid-region" hx-swap="innerHTML" data-folder-link data-folder="{{.Path}}"{{if .Active}} aria-current="page"{{end}}>
       <span class="folder-name">{{.Name}}</span>
       <span class="folder-count">{{.Count}}</span>
     </a>

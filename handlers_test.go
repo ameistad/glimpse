@@ -156,6 +156,29 @@ func TestMediaPageRendersReactiveMediaTypeToolbar(t *testing.T) {
 	}
 }
 
+func TestMediaPageRendersReactiveFolderNavigation(t *testing.T) {
+	handler := newTestHandler(t, "")
+	insertTestMediaItem(t, handler.db, "2024/trip", "mountain.jpg", MediaTypePhoto)
+
+	req := httptest.NewRequest(http.MethodGet, "/media?folder=2024/trip", nil)
+	res := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("/media status = %d, want 200", res.Code)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `data-folder-link data-folder="2024/trip" aria-current="page"`) {
+		t.Fatalf("expected active folder link to render client sync hooks, got %q", body)
+	}
+	if !strings.Contains(body, `name="folder" value="2024/trip" x-ref="folderInput"`) {
+		t.Fatalf("expected toolbar folder input to be wired to client folder state, got %q", body)
+	}
+	if !strings.Contains(body, `activeFolder`) {
+		t.Fatalf("expected page to reference reactive active folder state, got %q", body)
+	}
+}
+
 func TestMediaDetailShowsOriginalPathAndPlayableVideoSource(t *testing.T) {
 	handler := newTestHandler(t, "")
 	insertTestMediaItem(t, handler.db, "2024/trip", "clip.mp4", MediaTypeVideo)

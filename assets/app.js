@@ -1,6 +1,7 @@
 document.addEventListener("alpine:init", () => {
   Alpine.data("library", () => ({
     selectedId: null,
+    activeFolder: "",
     activeMediaType: "",
     fullPreview: {
       open: false,
@@ -47,6 +48,14 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
+    setActiveFolder(folder) {
+      this.activeFolder = this.normalizeFolder(folder);
+      if (this.$refs.folderInput) {
+        this.$refs.folderInput.value = this.activeFolder;
+      }
+      this.syncActiveFolderLinks();
+    },
+
     syncToolbarMediaType() {
       if (this.$refs.mediaTypeInput) {
         this.$refs.mediaTypeInput.value = this.activeMediaType;
@@ -65,7 +74,7 @@ document.addEventListener("alpine:init", () => {
       const state = document.getElementById("library-state");
       const listUrl = state?.dataset?.listUrl || "/media";
       history.pushState({}, "", listUrl);
-      this.setMediaType(this.mediaTypeFromLocation());
+      this.syncFromLocation();
     },
 
     handleKeydown(event) {
@@ -126,9 +135,30 @@ document.addEventListener("alpine:init", () => {
       return mediaType === "photo" || mediaType === "video" ? mediaType : "";
     },
 
+    folderFromLocation() {
+      return this.normalizeFolder(new URLSearchParams(window.location.search).get("folder") || "");
+    },
+
+    normalizeFolder(folder) {
+      return String(folder || "").trim().replace(/^\/+|\/+$/g, "");
+    },
+
+    syncActiveFolderLinks() {
+      document.querySelectorAll("[data-folder-link]").forEach((link) => {
+        const isActive = (link.dataset.folder || "") === this.activeFolder;
+        link.classList.toggle("is-active", isActive);
+        if (isActive) {
+          link.setAttribute("aria-current", "page");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      });
+    },
+
     syncFromLocation() {
       this.selectedId = this.idFromLocation();
       this.setMediaType(this.mediaTypeFromLocation());
+      this.setActiveFolder(this.folderFromLocation());
     },
   }));
 });
