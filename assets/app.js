@@ -41,6 +41,15 @@ document.addEventListener("alpine:init", () => {
       this.fullPreview.open = false;
     },
 
+    openFullPreviewFromCard(card) {
+      if (!card?.dataset?.fullSrc) {
+        return;
+      }
+
+      this.selectedId = card.dataset.mediaId || this.selectedId;
+      this.openFullPreview(card.dataset.fullSrc, card.dataset.fullAlt || "Preview");
+    },
+
     setMediaType(mediaType) {
       this.activeMediaType = mediaType === "photo" || mediaType === "video" ? mediaType : "";
       if (this.$refs.mediaTypeInput) {
@@ -78,9 +87,19 @@ document.addEventListener("alpine:init", () => {
     },
 
     handleKeydown(event) {
-      if (event.key === "Escape" && this.fullPreview.open) {
-        event.preventDefault();
-        this.closeFullPreview();
+      if (this.fullPreview.open) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          this.closeFullPreview();
+          return;
+        }
+
+        if (["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) {
+          event.preventDefault();
+          const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+          this.showAdjacentFullPreview(direction);
+        }
+
         return;
       }
 
@@ -122,6 +141,30 @@ document.addEventListener("alpine:init", () => {
       const nextIndex = Math.min(cards.length - 1, Math.max(0, index + direction));
       const next = cards[nextIndex];
       next.focus({ preventScroll: false });
+      next.click();
+    },
+
+    showAdjacentFullPreview(direction) {
+      const cards = Array.from(document.querySelectorAll("[data-media-card][data-full-src]"));
+      if (cards.length === 0) {
+        return;
+      }
+
+      let index = cards.findIndex((card) => card.dataset.mediaId === this.selectedId);
+      if (index < 0) {
+        index = cards.findIndex((card) => card.dataset.fullSrc === this.fullPreview.src);
+      }
+      if (index < 0) {
+        return;
+      }
+
+      const nextIndex = Math.min(cards.length - 1, Math.max(0, index + direction));
+      if (nextIndex === index) {
+        return;
+      }
+
+      const next = cards[nextIndex];
+      this.openFullPreviewFromCard(next);
       next.click();
     },
 

@@ -232,6 +232,8 @@
    hx-push-url="true"
    data-media-card
    data-media-id="{{.ID}}"
+   {{if not .IsVideo}}data-full-src="/media/{{.ID}}/thumbnail"
+   data-full-alt="{{.Filename}}"{{end}}
    @click="selectMedia('{{.ID}}')"
    :class="{ 'is-selected': selectedId === '{{.ID}}' }">
   <span class="thumb-frame">

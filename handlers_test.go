@@ -88,6 +88,7 @@ func TestAuthRedirectAndLoginCookie(t *testing.T) {
 func TestHTMXGridPartialPushesCanonicalMediaURL(t *testing.T) {
 	handler := newTestHandler(t, "")
 	insertTestMediaItem(t, handler.db, "2024/trip", "mountain.cr3", MediaTypePhoto)
+	item := firstMediaItem(t, handler.db)
 
 	req := httptest.NewRequest(http.MethodGet, "/media/grid?folder=2024&q=mountain", nil)
 	req.Header.Set("HX-Request", "true")
@@ -100,8 +101,15 @@ func TestHTMXGridPartialPushesCanonicalMediaURL(t *testing.T) {
 	if got := res.Header().Get("HX-Push-Url"); got != "/media?folder=2024&q=mountain" {
 		t.Fatalf("HX-Push-Url = %q", got)
 	}
-	if !strings.Contains(res.Body.String(), "mountain.cr3") {
-		t.Fatalf("expected media card in grid partial, got %q", res.Body.String())
+	body := res.Body.String()
+	if !strings.Contains(body, "mountain.cr3") {
+		t.Fatalf("expected media card in grid partial, got %q", body)
+	}
+	if !strings.Contains(body, `data-full-src="/media/`+strconv.FormatInt(item.ID, 10)+`/thumbnail"`) {
+		t.Fatalf("expected photo card full-preview source, got %q", body)
+	}
+	if !strings.Contains(body, `data-full-alt="mountain.cr3"`) {
+		t.Fatalf("expected photo card full-preview alt text, got %q", body)
 	}
 }
 
