@@ -179,6 +179,52 @@ func TestMediaPageRendersReactiveFolderNavigation(t *testing.T) {
 	}
 }
 
+func TestScanStatusRefreshesHTMXClientWhenRunningScanCompletes(t *testing.T) {
+	handler := newTestHandler(t, "")
+	routes := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/scan/status", nil)
+	req.Header.Set("HX-Request", "true")
+	res := httptest.NewRecorder()
+	routes.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("idle scan status = %d, want 200", res.Code)
+	}
+	if got := res.Header().Get("HX-Refresh"); got != "" {
+		t.Fatalf("idle HX-Refresh = %q, want empty", got)
+	}
+	if strings.Contains(res.Body.String(), "/scan/status?running=1") {
+		t.Fatalf("idle status should not mark a running scan, got %q", res.Body.String())
+	}
+
+	handler.scanner.scanning.Store(true)
+	req = httptest.NewRequest(http.MethodGet, "/scan/status", nil)
+	req.Header.Set("HX-Request", "true")
+	res = httptest.NewRecorder()
+	routes.ServeHTTP(res, req)
+
+	if got := res.Header().Get("HX-Refresh"); got != "" {
+		t.Fatalf("running HX-Refresh = %q, want empty", got)
+	}
+	if !strings.Contains(res.Body.String(), "/scan/status?running=1") {
+		t.Fatalf("running status should poll with completion marker, got %q", res.Body.String())
+	}
+
+	handler.scanner.scanning.Store(false)
+	req = httptest.NewRequest(http.MethodGet, "/scan/status?running=1", nil)
+	req.Header.Set("HX-Request", "true")
+	res = httptest.NewRecorder()
+	routes.ServeHTTP(res, req)
+
+	if got := res.Header().Get("HX-Refresh"); got != "true" {
+		t.Fatalf("completed scan HX-Refresh = %q, want true", got)
+	}
+	if !strings.Contains(res.Body.String(), "Idle") {
+		t.Fatalf("completed scan status should render idle, got %q", res.Body.String())
+	}
+}
+
 func TestMediaDetailShowsOriginalPathAndPlayableVideoSource(t *testing.T) {
 	handler := newTestHandler(t, "")
 	insertTestMediaItem(t, handler.db, "2024/trip", "clip.mp4", MediaTypeVideo)

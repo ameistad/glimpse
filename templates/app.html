@@ -333,7 +333,7 @@
 {{end}}
 
 {{define "scan_status"}}
-<div id="scan-status" class="scan-status {{if .Scanning}}is-running{{end}}" hx-get="/scan/status" hx-trigger="every 5s" hx-swap="outerHTML">
+<div id="scan-status" class="scan-status {{if .Scanning}}is-running{{end}}" hx-get="/scan/status{{if .Scanning}}?running=1{{end}}" hx-trigger="every 5s" hx-swap="outerHTML">
   {{if .Scanning}}Scanning{{else}}Idle{{end}}
 </div>
 {{end}}

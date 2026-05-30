@@ -230,12 +230,20 @@ func (h *Handler) StreamVideo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
-	h.scanner.TryScan()
-	h.render(w, http.StatusOK, "scan_status", ScanStatusData{Scanning: h.scanner.IsScanning()})
+	started := h.scanner.TryScan()
+	scanning := h.scanner.IsScanning()
+	if started && !scanning && isHTMX(r) {
+		w.Header().Set("HX-Refresh", "true")
+	}
+	h.render(w, http.StatusOK, "scan_status", ScanStatusData{Scanning: scanning})
 }
 
 func (h *Handler) ScanStatus(w http.ResponseWriter, r *http.Request) {
-	h.render(w, http.StatusOK, "scan_status", ScanStatusData{Scanning: h.scanner.IsScanning()})
+	scanning := h.scanner.IsScanning()
+	if !scanning && r.URL.Query().Get("running") == "1" && isHTMX(r) {
+		w.Header().Set("HX-Refresh", "true")
+	}
+	h.render(w, http.StatusOK, "scan_status", ScanStatusData{Scanning: scanning})
 }
 
 func (h *Handler) DevReloadVersion(w http.ResponseWriter, r *http.Request) {
